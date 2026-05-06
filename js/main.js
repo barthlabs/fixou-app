@@ -16,9 +16,105 @@
 
     if (orgBtn) {
       orgBtn.addEventListener('click', function () {
-        if (window._openOrgSwitcher) window._openOrgSwitcher();
+        window._openOrgSwitcher();
       });
     }
+  }
+
+  // === Org switcher modal ===
+  // Lists user's memberships, lets switch between them, create new, or go home.
+  window._openOrgSwitcher = function () {
+    var slot = document.getElementById('org-switcher-slot');
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = 'org-switcher-slot';
+      document.body.appendChild(slot);
+    }
+
+    var ms = window.AppStore.memberships || [];
+    var currentId = window.AppStore.currentOrgId;
+
+    var items = ms.length === 0
+      ? '<p class="text-muted text-small">Você ainda não pertence a nenhuma organização.</p>'
+      : ms.map(function (m) {
+          var isCurrent = m.orgId === currentId;
+          // We don't have org name here without an extra fetch — use orgId fallback
+          // and rely on currentOrg.name when current matches.
+          var label = (isCurrent && window.AppStore.currentOrg && window.AppStore.currentOrg.name)
+            ? window.AppStore.currentOrg.name
+            : ('Org ' + m.orgId.substring(0, 8));
+          var roleEmoji = m.role === 'admin' ? '👔' : (m.role === 'manager' ? '🧑‍💼' : '🛠️');
+          return '<button class="card" data-switch-org="' + window._safeAttr(m.orgId) + '" ' +
+            'style="text-align:left;cursor:pointer;width:100%;display:flex;align-items:center;gap:12px;margin-bottom:8px;border:' +
+            (isCurrent ? '2px solid var(--primary)' : '1px solid var(--border)') + ';">' +
+              '<div style="font-size:1.4rem;">' + roleEmoji + '</div>' +
+              '<div style="flex:1;">' +
+                '<div style="font-weight:700;">' + window._safeHtml(label) + '</div>' +
+                '<div class="text-small text-muted">' + roleLabelOrg(m.role) + (isCurrent ? ' · ativa' : '') + '</div>' +
+              '</div>' +
+              (isCurrent ? '<span class="badge badge-success text-small">atual</span>' : '<span class="text-muted text-small">→</span>') +
+            '</button>';
+        }).join('');
+
+    slot.innerHTML = '' +
+      '<div class="modal-overlay active" onclick="window._closeOrgSwitcher(event)">' +
+        '<div class="modal" onclick="event.stopPropagation()">' +
+          '<div class="modal-header">' +
+            '<h2 class="modal-title">Suas organizações</h2>' +
+            '<button class="modal-close" onclick="window._closeOrgSwitcher()">×</button>' +
+          '</div>' +
+          '<div style="max-height:50vh;overflow-y:auto;">' + items + '</div>' +
+          '<div class="flex gap-2 mt-4" style="flex-wrap:wrap;">' +
+            (currentId ? '<button class="btn btn-secondary btn-sm" onclick="window._goToHome()">🏠 Voltar ao início</button>' : '') +
+            '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="window._closeOrgSwitcher(); setTimeout(window._dashOpenCreateOrg, 100);">+ Nova organização</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Wire switch buttons
+    slot.querySelectorAll('[data-switch-org]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var orgId = btn.dataset.switchOrg;
+        window._switchToOrg(orgId);
+      });
+    });
+  };
+
+  window._closeOrgSwitcher = function (e) {
+    // If event fired and target isn't the overlay itself, ignore (prevents closing on inner clicks)
+    if (e && e.target && !e.target.classList.contains('modal-overlay')) return;
+    var slot = document.getElementById('org-switcher-slot');
+    if (slot) slot.innerHTML = '';
+  };
+
+  window._switchToOrg = function (orgId) {
+    if (!orgId) return;
+    window.AppStore.setCurrentOrg(orgId);
+    window._closeOrgSwitcher();
+    if (window.location.hash !== '#dashboard') {
+      window.location.hash = '#dashboard';
+    } else {
+      setTimeout(function () { window.routerRender(); }, 200);
+    }
+  };
+
+  // Go to home (clear current org context). User can pick another or create new.
+  window._goToHome = function () {
+    // setCurrentOrg(null) clears local state but keeps memberships intact
+    window.AppStore.setCurrentOrg(null);
+    window._closeOrgSwitcher();
+    if (window.location.hash !== '#dashboard') {
+      window.location.hash = '#dashboard';
+    } else {
+      setTimeout(function () { window.routerRender(); }, 100);
+    }
+  };
+
+  function roleLabelOrg(r) {
+    if (r === 'admin') return 'Administrador';
+    if (r === 'manager') return 'Gestor';
+    if (r === 'provider') return 'Prestador';
+    return r || '';
   }
 
   function syncTopbarUser() {

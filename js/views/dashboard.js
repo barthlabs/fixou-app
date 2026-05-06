@@ -153,9 +153,18 @@
 
   // ============= CREATE ORG MODAL =============
 
-  function openCreateOrgModal() {
+  // Exposed globally so org switcher (in main.js) can call it
+  window._dashOpenCreateOrg = function () { openCreateOrgModal(true); };
+
+  function openCreateOrgModal(useGlobalSlot) {
+    // When called from outside dashboard view (e.g. org switcher),
+    // we may not have an action-modal-slot yet — create one on body.
     var slot = document.getElementById('action-modal-slot');
-    if (!slot) return;
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = 'action-modal-slot';
+      document.body.appendChild(slot);
+    }
     slot.innerHTML = '' +
       '<div class="modal-overlay active" id="create-org-overlay">' +
         '<div class="modal">' +

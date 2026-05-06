@@ -8,17 +8,31 @@
     var navDash = document.getElementById('nav-dashboard');
     var navProv = document.getElementById('nav-providers');
     var navProf = document.getElementById('nav-profile');
-    var orgBtn = document.getElementById('org-switcher-btn');
 
-    if (navDash) navDash.addEventListener('click', function () { window.location.hash = '#dashboard'; });
-    if (navProv) navProv.addEventListener('click', function () { window.location.hash = '#providers'; });
-    if (navProf) navProf.addEventListener('click', function () { window.location.hash = '#profile'; });
-
-    if (orgBtn) {
-      orgBtn.addEventListener('click', function () {
-        window._openOrgSwitcher();
+    // Logo click: always go home (clear org context)
+    var logo = document.querySelector('.topbar-logo');
+    if (logo) {
+      logo.addEventListener('click', function (e) {
+        e.preventDefault();
+        window.AppStore.setCurrentOrg(null);
+        if (window.location.hash !== '#dashboard') {
+          window.location.hash = '#dashboard';
+        } else {
+          window.routerRender();
+        }
       });
     }
+
+    if (navDash) navDash.addEventListener('click', function () {
+      window.AppStore.setCurrentOrg(null);
+      if (window.location.hash !== '#dashboard') {
+        window.location.hash = '#dashboard';
+      } else {
+        window.routerRender();
+      }
+    });
+    if (navProv) navProv.addEventListener('click', function () { window.location.hash = '#providers'; });
+    if (navProf) navProf.addEventListener('click', function () { window.location.hash = '#profile'; });
   }
 
   // === Org switcher modal ===
@@ -135,27 +149,9 @@
   }
 
   function syncTopbarOrg() {
+    // Org navigation is now inline in the dashboard view — hide topbar switcher always.
     var orgEl = document.getElementById('topbar-org');
-    var nameEl = document.getElementById('org-current-name');
-    if (!orgEl || !nameEl) return;
-
-    var memberships = window.AppStore.memberships || [];
-    if (memberships.length === 0) {
-      orgEl.hidden = true;
-      return;
-    }
-    orgEl.hidden = false;
-
-    var current = window.AppStore.currentOrg;
-    if (current && current.name) {
-      nameEl.textContent = current.name;
-    } else if (window.AppStore.currentOrgId) {
-      // Try membership cache while org doc is loading
-      var m = memberships.find(function (x) { return x.orgId === window.AppStore.currentOrgId; });
-      nameEl.textContent = (m && m.orgName) ? m.orgName : '…';
-    } else {
-      nameEl.textContent = 'Selecionar organização';
-    }
+    if (orgEl) orgEl.hidden = true;
   }
 
   // === User onboarding check ===

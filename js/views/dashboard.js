@@ -18,17 +18,30 @@
     // No org context yet — show home with action cards
     if (!hasOrg) return renderHome(container);
 
+    var u2 = window.AppStore.currentUser || {};
+    var firstName = (u2.displayName || '').split(' ')[0] || 'usuário';
+    var memberships2 = window.AppStore.memberships || [];
+    var adminOrgs = memberships2.filter(function (m) { return m.role === 'admin'; });
+    var currentIdx = -1;
+    adminOrgs.forEach(function (m, i) { if (m.orgId === window.AppStore.currentOrgId) currentIdx = i; });
+    var orgName = (window.AppStore.currentOrg || {}).name ||
+      (adminOrgs[currentIdx] && (adminOrgs[currentIdx].orgName || adminOrgs[currentIdx]._resolvedName)) || '—';
+    var hasPrev = currentIdx > 0;
+    var hasNext = currentIdx !== -1 && currentIdx < adminOrgs.length - 1;
+
     container.innerHTML = '' +
-      '<div class="mb-3">' +
-        '<button class="btn btn-ghost btn-sm" id="btn-back-home">← Início</button>' +
-      '</div>' +
       '<div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px;">' +
-        '<div>' +
-          '<h1 class="page-title" style="margin-bottom:2px;">' + window._safeHtml((window.AppStore.currentOrg || {}).name || '—') + '</h1>' +
-          '<div class="text-muted text-small">' + roleLabel(role) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex:1;min-width:0;">' +
+          '<h1 class="page-title" style="margin:0;">Olá, ' + window._safeHtml(firstName) + '! 👋</h1>' +
+          '<div style="display:flex;align-items:center;gap:4px;">' +
+            '<button id="btn-prev-org" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:1.1rem;' + (!hasPrev ? 'opacity:0.25;cursor:default;' : '') + '" ' + (!hasPrev ? 'disabled' : '') + '>‹</button>' +
+            '<span style="font-weight:700;font-size:0.95rem;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + window._safeAttr(orgName) + '">' + window._safeHtml(orgName) + '</span>' +
+            '<button id="btn-next-org" class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:1.1rem;' + (!hasNext ? 'opacity:0.25;cursor:default;' : '') + '" ' + (!hasNext ? 'disabled' : '') + '>›</button>' +
+          '</div>' +
         '</div>' +
         (canCreateTicket(role) ? '<button class="btn btn-primary" id="btn-new-ticket">+ Novo chamado</button>' : '') +
       '</div>' +
+      '<div class="text-muted text-small mb-4">' + roleLabel(role) + '</div>' +
 
       renderStats() +
 
@@ -42,11 +55,19 @@
       (role === 'admin' ? '<div class="mt-4 flex gap-2"><a class="btn btn-secondary" href="#admin">⚙️ Administrar organização</a></div>' : '');
 
     // wire
-    var backBtn = document.getElementById('btn-back-home');
-    if (backBtn) backBtn.addEventListener('click', function () {
-      window.AppStore.setCurrentOrg(null);
-      window.routerRender();
-    });
+    var prevBtn = document.getElementById('btn-prev-org');
+    if (prevBtn && hasPrev) {
+      prevBtn.addEventListener('click', function () {
+        window._dashEnterOrg(adminOrgs[currentIdx - 1].orgId);
+      });
+    }
+
+    var nextBtn = document.getElementById('btn-next-org');
+    if (nextBtn && hasNext) {
+      nextBtn.addEventListener('click', function () {
+        window._dashEnterOrg(adminOrgs[currentIdx + 1].orgId);
+      });
+    }
 
     var newBtn = document.getElementById('btn-new-ticket');
     if (newBtn) newBtn.addEventListener('click', function () { window.location.hash = '#ticket/new'; });

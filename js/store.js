@@ -83,11 +83,40 @@ window.FIXOU_VERSION = '0.1.0-alpha';
               return Object.assign({ id: d.id }, d.data());
             });
             window.dispatchEvent(new CustomEvent('memberships-changed'));
+            // Fill in any missing orgName fields (legacy docs) and persist them
+            self._backfillOrgNames(self.memberships);
           },
           function (err) {
             console.error('[store] memberships listener error:', err);
           }
         );
+    },
+
+    // Fetch org names for memberships that lack orgName, patch in-memory
+    // objects, write back to Firestore and re-dispatch so all UI updates.
+    _backfillOrgNames: function (memberships) {
+      var self = this;
+      var unresolved = memberships.filter(function (m) { return !m.orgName; });
+      if (unresolved.length === 0) return;
+
+      unresolved.forEach(function (m) {
+        window.db.collection('organizations').doc(m.orgId).get()
+          .then(function (snap) {
+            if (!snap.exists) return;
+            var name = (snap.data() || {}).name;
+            if (!name) return;
+            m.orgName = name;
+            // Persist so future snapshots already have the name
+            window.db.collection('memberships').doc(m.id)
+              .update({ orgName: name })
+              .catch(function () {});
+            // Re-notify listeners so switcher / home screen refresh
+            window.dispatchEvent(new CustomEvent('memberships-changed'));
+          })
+          .catch(function (e) {
+            console.warn('[store] _backfillOrgNames failed for', m.orgId, e);
+          });
+      });
     },
 
     // === CURRENT ORG ===

@@ -38,11 +38,9 @@
       ? '<p class="text-muted text-small">Você ainda não pertence a nenhuma organização.</p>'
       : ms.map(function (m) {
           var isCurrent = m.orgId === currentId;
-          // We don't have org name here without an extra fetch — use orgId fallback
-          // and rely on currentOrg.name when current matches.
-          var label = (isCurrent && window.AppStore.currentOrg && window.AppStore.currentOrg.name)
-            ? window.AppStore.currentOrg.name
-            : ('Org ' + m.orgId.substring(0, 8));
+          var label = m.orgName
+            || (isCurrent && window.AppStore.currentOrg && window.AppStore.currentOrg.name)
+            || ('Org ' + m.orgId.substring(0, 8));
           var roleEmoji = m.role === 'admin' ? '👔' : (m.role === 'manager' ? '🧑‍💼' : '🛠️');
           return '<button class="card" data-switch-org="' + window._safeAttr(m.orgId) + '" ' +
             'style="text-align:left;cursor:pointer;width:100%;display:flex;align-items:center;gap:12px;margin-bottom:8px;border:' +
@@ -152,7 +150,9 @@
     if (current && current.name) {
       nameEl.textContent = current.name;
     } else if (window.AppStore.currentOrgId) {
-      nameEl.textContent = '…';
+      // Try membership cache while org doc is loading
+      var m = memberships.find(function (x) { return x.orgId === window.AppStore.currentOrgId; });
+      nameEl.textContent = (m && m.orgName) ? m.orgName : '…';
     } else {
       nameEl.textContent = 'Selecionar organização';
     }

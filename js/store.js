@@ -1,6 +1,6 @@
 // fixou.app — AppStore (global state)
 
-window.FIXOU_VERSION = '0.1.4-alpha';
+window.FIXOU_VERSION = '0.1.5-alpha';
 
 (function () {
   'use strict';

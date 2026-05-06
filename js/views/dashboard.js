@@ -144,16 +144,15 @@
 
   function homeOrgCard(m) {
     var name = m.orgName || m._resolvedName || ('Org ' + m.orgId.substring(0, 8));
-    return '<div class="card" data-org-card="' + window._safeAttr(m.orgId) + '" style="display:flex;flex-direction:column;gap:10px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;">' +
-        '<div style="font-size:1.5rem;flex-shrink:0;">🏢</div>' +
-        '<div style="flex:1;min-width:0;">' +
-          '<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" class="org-name-label">' + window._safeHtml(name) + '</div>' +
-          '<div class="text-small text-muted">Administrador</div>' +
-        '</div>' +
+    return '<button class="card" data-org-card="' + window._safeAttr(m.orgId) + '" data-enter-org="' + window._safeAttr(m.orgId) + '" ' +
+      'style="display:flex;align-items:center;gap:12px;cursor:pointer;width:100%;text-align:left;">' +
+      '<div style="font-size:1.5rem;flex-shrink:0;">🏢</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" class="org-name-label">' + window._safeHtml(name) + '</div>' +
+        '<div class="text-small text-muted">Administrador</div>' +
       '</div>' +
-      '<button class="btn btn-secondary btn-sm" data-enter-org="' + window._safeAttr(m.orgId) + '">Entrar →</button>' +
-    '</div>';
+      '<span class="text-muted" style="font-size:1rem;">›</span>' +
+    '</button>';
   }
 
   function homeProviderCard(p) {

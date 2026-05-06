@@ -63,15 +63,14 @@
   }
 
   // === User onboarding check ===
-  // True if user has not yet completed any role setup (no memberships AND no provider profile)
+  // True ONLY if user has no displayName at all (brand-new user).
+  // Roles (admin/manager/provider) are contextual per-organization, NOT a person-level attribute.
+  // Existing users with displayName but no `onboarded` flag are considered ok (no friction).
   window._needsOnboarding = function () {
     var u = window.AppStore.currentUser;
     if (!u) return false;
     if (!u.userDocLoaded) return false; // not ready yet
-    var hasMembership = (window.AppStore.memberships || []).length > 0;
-    var hasProvider = !!window.AppStore.providerProfile;
-    var hasRole = u.isAdmin || u.isManager || u.isProvider;
-    return !hasMembership && !hasProvider && !hasRole;
+    return !u.displayName || u.displayName.trim().length === 0;
   };
 
   // === Auth state listener ===

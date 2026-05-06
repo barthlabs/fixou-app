@@ -15,11 +15,8 @@
     var role = window.AppStore.currentOrgRole;
     var hasOrg = !!window.AppStore.currentOrgId;
 
-    // Provider without org-context: show available published tickets across orgs
-    if (u.isProvider && !hasOrg) return renderProviderHome(container);
-
-    // No org yet (admin/manager waiting)
-    if (!hasOrg) return renderEmptyState(container);
+    // No org context yet — show home with action cards
+    if (!hasOrg) return renderHome(container);
 
     container.innerHTML = '' +
       '<div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px;">' +
@@ -66,74 +63,270 @@
     unsubscribers.push(function () { window.removeEventListener('tickets-changed', rerender); });
   };
 
-  function renderProviderHome(container) {
+  // Unified home for users without an active org context.
+  // Shows current memberships (if any), provider profile (if any), and 3 actions:
+  //  1. Create organization, 2. Become provider, 3. Wait for invite (info)
+  function renderHome(container) {
+    var u = window.AppStore.currentUser || {};
+    var firstName = (u.displayName || '').split(' ')[0] || 'usuário';
+    var memberships = window.AppStore.memberships || [];
+    var hasMemberships = memberships.length > 0;
+    var hasProvider = !!window.AppStore.providerProfile;
+
     container.innerHTML = '' +
-      '<h1 class="page-title">Chamados disponíveis</h1>' +
-      '<p class="page-subtitle">Chamados públicos onde você pode se candidatar.</p>' +
-      '<div id="provider-feed">' + window.emptyState('🛠️', 'Em breve', 'O feed de chamados públicos para prestadores estará disponível em breve.') + '</div>';
+      '<h1 class="page-title">Olá, ' + window._safeHtml(firstName) + '! 👋</h1>' +
+      '<p class="page-subtitle">O que você quer fazer no fixou.app hoje?</p>' +
+
+      (hasMemberships ? renderMembershipsBlock(memberships) : '') +
+
+      '<h2 class="section-title" style="margin-top:24px;">Adicionar uma função</h2>' +
+      '<div class="grid grid-cols-auto">' +
+
+        // Card 1: Create organization
+        actionCard('🏢', 'Administrar uma organização',
+          'Você é dono ou síndico de uma rede de lojas, condomínio, clube etc.? Crie aqui sua organização e cadastre as unidades.',
+          'create-org') +
+
+        // Card 2: Become provider
+        (hasProvider
+          ? '<div class="card" style="border:1px solid var(--success);">' +
+              '<div style="font-size:2rem;margin-bottom:6px;">🛠️</div>' +
+              '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Prestador de serviço</div>' +
+              '<div class="text-small text-muted mb-4">Seu perfil de prestador está ativo. Edite suas especialidades no perfil.</div>' +
+              '<a class="btn btn-secondary btn-sm" href="#profile">Editar perfil de prestador →</a>' +
+            '</div>'
+          : actionCard('🛠️', 'Oferecer serviços',
+              'Você é eletricista, encanador, pintor, técnico? Cadastre-se como prestador e receba chamados de organizações que precisam dos seus serviços.',
+              'become-provider')
+        ) +
+
+        // Card 3: Pending invites
+        '<div class="card">' +
+          '<div style="font-size:2rem;margin-bottom:6px;">💌</div>' +
+          '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Convites recebidos</div>' +
+          '<div class="text-small text-muted mb-4">Quando alguém convidar você pra gerenciar uma organização ou unidade, os convites aparecerão aqui.</div>' +
+          '<div id="invites-slot" class="text-small text-muted">Sem convites no momento.</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Inline modal slot for action overlays
+      '<div id="action-modal-slot"></div>';
+
+    // Wire action cards
+    var btnCreateOrg = document.querySelector('[data-action="create-org"]');
+    if (btnCreateOrg) btnCreateOrg.addEventListener('click', openCreateOrgModal);
+
+    var btnBecomeProvider = document.querySelector('[data-action="become-provider"]');
+    if (btnBecomeProvider) btnBecomeProvider.addEventListener('click', openBecomeProviderModal);
   }
 
-  function renderEmptyState(container) {
-    var u = window.AppStore.currentUser || {};
-    var isAdmin = u.isAdmin === true;
-    container.innerHTML = '' +
-      '<h1 class="page-title">Olá, ' + window._safeHtml((u.displayName || '').split(' ')[0] || 'usuário') + '! 👋</h1>' +
-      '<p class="page-subtitle">Você ainda não tem nenhuma organização associada.</p>' +
+  function actionCard(icon, title, desc, action) {
+    return '<button class="card" data-action="' + action + '" ' +
+      'style="text-align:left;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;width:100%;">' +
+      '<div style="font-size:2rem;margin-bottom:6px;">' + icon + '</div>' +
+      '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">' + window._safeHtml(title) + '</div>' +
+      '<div class="text-small text-muted mb-4">' + window._safeHtml(desc) + '</div>' +
+      '<span class="btn btn-primary btn-sm" style="margin-top:auto;">Começar →</span>' +
+    '</button>';
+  }
 
-      (isAdmin ? '<div class="card" style="border:1px solid var(--primary);">' +
-        '<h3 style="margin-bottom:8px;">🏢 Criar minha primeira organização</h3>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="empty-org-name">Nome</label>' +
-          '<input type="text" id="empty-org-name" placeholder="Ex.: Lojas Bella, Condomínio Solar">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="empty-org-type">Tipo</label>' +
-          '<select id="empty-org-type">' +
-            '<option value="lojas">Rede de lojas</option>' +
-            '<option value="condominio">Condomínio</option>' +
-            '<option value="clube">Clube</option>' +
-            '<option value="outro">Outro</option>' +
-          '</select>' +
-        '</div>' +
-        '<button class="btn btn-primary btn-block" id="empty-create-org-btn">Criar organização</button>' +
-      '</div>' : '') +
+  function renderMembershipsBlock(memberships) {
+    return '' +
+      '<h2 class="section-title">Suas organizações</h2>' +
+      '<div class="grid grid-cols-auto">' +
+        memberships.map(function (m) {
+          return '<button class="card" onclick="window._dashEnterOrg(\'' + window._safeAttr(m.orgId) + '\')" ' +
+            'style="text-align:left;cursor:pointer;width:100%;">' +
+            '<div style="font-weight:700;">' + window._safeHtml(m.orgId.substring(0, 12)) + '…</div>' +
+            '<div class="text-small text-muted">' + roleLabel(m.role) + '</div>' +
+            '<span class="btn btn-secondary btn-sm mt-2">Entrar →</span>' +
+          '</button>';
+        }).join('') +
+      '</div>';
+  }
 
-      '<div class="card">' +
-        '<h3 style="margin-bottom:8px;">Outras opções</h3>' +
-        '<ul style="margin-left:20px;color:var(--text-secondary);line-height:1.8;">' +
-          '<li>Aguarde um convite de administrador para entrar numa organização</li>' +
-          '<li>Ou ajuste seu perfil</li>' +
-        '</ul>' +
-        '<div class="mt-4"><a class="btn btn-secondary" href="#profile">Ir para o perfil</a></div>' +
+  // Switch to a specific org and re-render
+  window._dashEnterOrg = function (orgId) {
+    window.AppStore.setCurrentOrg(orgId);
+    setTimeout(function () { window.routerRender(); }, 200);
+  };
+
+  // ============= CREATE ORG MODAL =============
+
+  function openCreateOrgModal() {
+    var slot = document.getElementById('action-modal-slot');
+    if (!slot) return;
+    slot.innerHTML = '' +
+      '<div class="modal-overlay active" id="create-org-overlay">' +
+        '<div class="modal">' +
+          '<div class="modal-header">' +
+            '<h2 class="modal-title">🏢 Nova organização</h2>' +
+            '<button class="modal-close" onclick="window._closeActionModal()">×</button>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="co-name">Nome</label>' +
+            '<input type="text" id="co-name" placeholder="Ex.: Lojas Bella, Condomínio Solar, Casa de Praia">' +
+            '<div class="form-help">Pode ser sua casa, sua empresa, um condomínio que você administra etc.</div>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="co-type">Tipo</label>' +
+            '<select id="co-type">' +
+              '<option value="lojas">Rede de lojas</option>' +
+              '<option value="condominio">Condomínio</option>' +
+              '<option value="clube">Clube</option>' +
+              '<option value="casa">Residência</option>' +
+              '<option value="outro">Outro</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;">' +
+            '<button class="btn btn-ghost" onclick="window._closeActionModal()">Cancelar</button>' +
+            '<button class="btn btn-primary" id="co-confirm">Criar</button>' +
+          '</div>' +
+        '</div>' +
       '</div>';
 
-    var createBtn = document.getElementById('empty-create-org-btn');
-    if (createBtn) createBtn.addEventListener('click', handleCreateOrgFromEmpty);
+    setTimeout(function () {
+      var nameEl = document.getElementById('co-name');
+      if (nameEl) nameEl.focus();
+    }, 100);
+
+    var confirmBtn = document.getElementById('co-confirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', handleCreateOrg);
   }
 
-  async function handleCreateOrgFromEmpty() {
-    var name = (document.getElementById('empty-org-name') || {}).value;
-    var type = (document.getElementById('empty-org-type') || {}).value;
+  window._closeActionModal = function () {
+    var slot = document.getElementById('action-modal-slot');
+    if (slot) slot.innerHTML = '';
+  };
+
+  async function handleCreateOrg() {
+    var name = (document.getElementById('co-name') || {}).value;
+    var type = (document.getElementById('co-type') || {}).value;
     name = (name || '').trim();
-    if (!name) { window.showNotification('Atenção', 'Informe o nome da organização', 'warning'); return; }
+    if (!name) { window.showNotification('Atenção', 'Informe um nome', 'warning'); return; }
+
     window.showLoading('Criando organização…');
     try {
-      var orgId = await window.AppStore.createOrganization({ name: name, type: type || 'lojas' });
+      var orgId = await window.AppStore.createOrganization({ name: name, type: type || 'outro' });
       var u = window.AppStore.currentUser;
       if (u && u.uid) await window.AppStore.saveUserDoc(u.uid, { defaultOrgId: orgId });
       window.hideLoading();
+      window._closeActionModal();
       window.showNotification('Pronto!', 'Organização criada.', 'success');
-      // Wait briefly for memberships listener to fire and pick the new org
       setTimeout(function () {
         var ms = window.AppStore.memberships || [];
-        var found = ms.find(function (m) { return m.orgId === orgId; });
-        if (found) window.AppStore.setCurrentOrg(orgId);
+        if (ms.find(function (m) { return m.orgId === orgId; })) {
+          window.AppStore.setCurrentOrg(orgId);
+        }
         window.routerRender();
-      }, 600);
+      }, 700);
     } catch (err) {
       window.hideLoading();
       console.error('[dashboard] createOrg error:', err);
       window.showNotification('Erro', err.message || 'Não foi possível criar.', 'error');
+    }
+  }
+
+  // ============= BECOME PROVIDER MODAL =============
+
+  var SPECIALTIES = [
+    { id: 'eletrica', label: '⚡ Elétrica' },
+    { id: 'hidraulica', label: '🚿 Hidráulica' },
+    { id: 'pintura', label: '🎨 Pintura' },
+    { id: 'jardinagem', label: '🌿 Jardinagem' },
+    { id: 'limpeza', label: '🧹 Limpeza' },
+    { id: 'ar_condicionado', label: '❄️ Ar-condicionado' },
+    { id: 'serralheria', label: '🔩 Serralheria' },
+    { id: 'marcenaria', label: '🪚 Marcenaria' },
+    { id: 'pedreiro', label: '🧱 Alvenaria' },
+    { id: 'tecnologia', label: '💻 Tecnologia/TI' },
+    { id: 'outros', label: '🛠️ Outros' }
+  ];
+  var providerSpecs = [];
+
+  function openBecomeProviderModal() {
+    providerSpecs = [];
+    var slot = document.getElementById('action-modal-slot');
+    if (!slot) return;
+    slot.innerHTML = '' +
+      '<div class="modal-overlay active">' +
+        '<div class="modal">' +
+          '<div class="modal-header">' +
+            '<h2 class="modal-title">🛠️ Cadastrar como prestador</h2>' +
+            '<button class="modal-close" onclick="window._closeActionModal()">×</button>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<div class="form-label">Especialidades (selecione uma ou mais)</div>' +
+            '<div id="prov-spec-pills" style="display:flex;flex-wrap:wrap;gap:8px;">' +
+              SPECIALTIES.map(function (s) {
+                return '<button class="badge" data-spec="' + s.id + '" style="cursor:pointer;font-size:0.9rem;padding:8px 14px;background:rgba(255,255,255,0.06);color:var(--text-secondary);border:2px solid transparent;">' +
+                  s.label + '</button>';
+              }).join('') +
+            '</div>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label" for="prov-bio">Sobre você (opcional)</label>' +
+            '<textarea id="prov-bio" rows="3" placeholder="Ex.: 10 anos de experiência em manutenção predial. Atendo emergências."></textarea>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;">' +
+            '<button class="btn btn-ghost" onclick="window._closeActionModal()">Cancelar</button>' +
+            '<button class="btn btn-primary" id="prov-confirm">Cadastrar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.querySelectorAll('[data-spec]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var id = el.dataset.spec;
+        var idx = providerSpecs.indexOf(id);
+        if (idx === -1) {
+          providerSpecs.push(id);
+          el.style.background = 'rgba(30,64,175,0.4)';
+          el.style.color = 'white';
+          el.style.border = '2px solid var(--primary)';
+        } else {
+          providerSpecs.splice(idx, 1);
+          el.style.background = 'rgba(255,255,255,0.06)';
+          el.style.color = 'var(--text-secondary)';
+          el.style.border = '2px solid transparent';
+        }
+      });
+    });
+
+    var confirmBtn = document.getElementById('prov-confirm');
+    if (confirmBtn) confirmBtn.addEventListener('click', handleBecomeProvider);
+  }
+
+  async function handleBecomeProvider() {
+    if (providerSpecs.length === 0) {
+      window.showNotification('Atenção', 'Selecione ao menos uma especialidade', 'warning');
+      return;
+    }
+    var u = window.AppStore.currentUser;
+    if (!u) return;
+    var bio = ((document.getElementById('prov-bio') || {}).value || '').trim();
+
+    window.showLoading('Cadastrando…');
+    try {
+      await window.AppStore.saveProviderProfile(u.uid, {
+        uid: u.uid,
+        displayName: u.displayName,
+        photoURL: u.photoURL || null,
+        specialties: providerSpecs.slice(),
+        serviceRegions: [],
+        rating: 0,
+        reviewCount: 0,
+        bio: bio,
+        availability: ''
+      });
+      window.hideLoading();
+      window._closeActionModal();
+      window.showNotification('Pronto!', 'Você está listado como prestador.', 'success');
+      setTimeout(function () { window.routerRender(); }, 500);
+    } catch (err) {
+      window.hideLoading();
+      console.error('[dashboard] become provider error:', err);
+      window.showNotification('Erro', err.message || 'Não foi possível cadastrar.', 'error');
     }
   }
 

@@ -42,12 +42,8 @@
 
         '<h3 class="section-title">Papéis ativos</h3>' +
         '<div class="card">' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
-            (u.isAdmin ? '<span class="badge badge-purple">👔 Administrador</span>' : '') +
-            (u.isManager ? '<span class="badge badge-info">🧑‍💼 Gestor</span>' : '') +
-            (u.isProvider ? '<span class="badge badge-success">🛠️ Prestador</span>' : '') +
-            (!u.isAdmin && !u.isManager && !u.isProvider ? '<span class="text-muted text-small">Nenhum papel definido</span>' : '') +
-          '</div>' +
+          renderActiveRoles(memberships, providerProfile) +
+          '<p class="text-small text-muted mt-4">Os papéis são contextuais. Você pode ser admin de uma organização, gestor em outra, e prestador para terceiros — tudo ao mesmo tempo.</p>' +
         '</div>' +
 
         '<h3 class="section-title">Minhas organizações (' + memberships.length + ')</h3>' +
@@ -91,6 +87,29 @@
         '</div>' +
         '<p class="text-small text-muted">' + window._safeHtml(p.bio || 'Sem descrição.') + '</p>' +
       '</div>';
+  }
+
+  function renderActiveRoles(memberships, providerProfile) {
+    var roles = [];
+    var hasAdmin = (memberships || []).some(function (m) { return m.role === 'admin'; });
+    var hasManager = (memberships || []).some(function (m) { return m.role === 'manager'; });
+    var hasProvider = !!providerProfile;
+
+    if (hasAdmin) {
+      var adminCount = memberships.filter(function (m) { return m.role === 'admin'; }).length;
+      roles.push('<span class="badge badge-purple">👔 Administrador (' + adminCount + ')</span>');
+    }
+    if (hasManager) {
+      var managerCount = memberships.filter(function (m) { return m.role === 'manager'; }).length;
+      roles.push('<span class="badge badge-info">🧑‍💼 Gestor (' + managerCount + ')</span>');
+    }
+    if (hasProvider) {
+      roles.push('<span class="badge badge-success">🛠️ Prestador</span>');
+    }
+    if (roles.length === 0) {
+      return '<span class="text-muted text-small">Nenhum papel definido. Vá ao Dashboard pra criar uma organização ou cadastrar-se como prestador.</span>';
+    }
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + roles.join('') + '</div>';
   }
 
   async function handleSave() {

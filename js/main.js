@@ -261,9 +261,29 @@
   window.addEventListener('current-org-doc-changed', syncTopbarOrg);
   window.addEventListener('current-org-changed', syncTopbarOrg);
 
+  // === Version badge ===
+  function injectVersionBadge() {
+    var badge = document.createElement('div');
+    badge.id = 'version-badge';
+    badge.textContent = 'v' + (window.FIXOU_VERSION || '?');
+    badge.style.cssText = [
+      'position:fixed',
+      'top:calc(var(--topbar-h, 60px) + 4px)',
+      'right:10px',
+      'font-size:0.65rem',
+      'color:var(--text-muted, rgba(255,255,255,0.35))',
+      'letter-spacing:0.04em',
+      'pointer-events:none',
+      'z-index:900',
+      'user-select:none'
+    ].join(';');
+    document.body.appendChild(badge);
+  }
+
   // === Boot ===
   document.addEventListener('DOMContentLoaded', function () {
     wireTopbar();
+    injectVersionBadge();
     window.initRouter();
     window.auth.onAuthStateChanged(onAuthChanged);
     console.log('[fixou.app] booted — version', window.FIXOU_VERSION);

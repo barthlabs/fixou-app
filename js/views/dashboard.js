@@ -30,6 +30,9 @@
     var hasNext = currentIdx !== -1 && currentIdx < adminOrgs.length - 1;
 
     container.innerHTML = '' +
+      '<div class="mb-3">' +
+        '<button class="btn btn-ghost btn-sm" id="btn-back-home">← Início</button>' +
+      '</div>' +
       '<div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px;">' +
         '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex:1;min-width:0;">' +
           '<h1 class="page-title" style="margin:0;">Olá, ' + window._safeHtml(firstName) + '! 👋</h1>' +
@@ -55,6 +58,12 @@
       (role === 'admin' ? '<div class="mt-4 flex gap-2"><a class="btn btn-secondary" href="#admin">⚙️ Administrar organização</a></div>' : '');
 
     // wire
+    var backBtn = document.getElementById('btn-back-home');
+    if (backBtn) backBtn.addEventListener('click', function () {
+      window.AppStore.setCurrentOrg(null);
+      window.routerRender();
+    });
+
     var prevBtn = document.getElementById('btn-prev-org');
     if (prevBtn && hasPrev) {
       prevBtn.addEventListener('click', function () {

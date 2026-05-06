@@ -205,6 +205,7 @@ window.FIXOU_VERSION = '0.1.0-alpha';
       var membershipPayload = {
         uid: uid,
         orgId: orgId,
+        orgName: data.name,
         role: 'admin',
         unitIds: [],
         status: 'active',

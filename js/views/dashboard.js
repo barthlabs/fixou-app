@@ -63,86 +63,170 @@
     unsubscribers.push(function () { window.removeEventListener('tickets-changed', rerender); });
   };
 
-  // Unified home for users without an active org context.
-  // Shows current memberships (if any), provider profile (if any), and 3 actions:
-  //  1. Create organization, 2. Become provider, 3. Wait for invite (info)
+  // Home screen — shown when user has no active org context.
+  // Layout:
+  //   1. 4 aggregate stat boxes (async loaded from all orgs)
+  //   2. "Organizações que administro" + "+ Nova organização" button
+  //   3. "Serviços que presto" + "+ Oferecer serviços" or "Editar perfil" button
   function renderHome(container) {
     var u = window.AppStore.currentUser || {};
     var firstName = (u.displayName || '').split(' ')[0] || 'usuário';
     var memberships = window.AppStore.memberships || [];
-    var hasMemberships = memberships.length > 0;
-    var hasProvider = !!window.AppStore.providerProfile;
+    var providerProfile = window.AppStore.providerProfile;
+
+    var adminOrgs = memberships.filter(function (m) { return m.role === 'admin'; });
 
     container.innerHTML = '' +
       '<h1 class="page-title">Olá, ' + window._safeHtml(firstName) + '! 👋</h1>' +
-      '<p class="page-subtitle">O que você quer fazer no fixou.app hoje?</p>' +
 
-      (hasMemberships ? renderMembershipsBlock(memberships) : '') +
-
-      '<h2 class="section-title" style="margin-top:24px;">Adicionar uma função</h2>' +
-      '<div class="grid grid-cols-auto">' +
-
-        // Card 1: Create organization
-        actionCard('🏢', 'Administrar uma organização',
-          'Você é dono ou síndico de uma rede de lojas, condomínio, clube etc.? Crie aqui sua organização e cadastre as unidades.',
-          'create-org') +
-
-        // Card 2: Become provider
-        (hasProvider
-          ? '<div class="card" style="border:1px solid var(--success);">' +
-              '<div style="font-size:2rem;margin-bottom:6px;">🛠️</div>' +
-              '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Prestador de serviço</div>' +
-              '<div class="text-small text-muted mb-4">Seu perfil de prestador está ativo. Edite suas especialidades no perfil.</div>' +
-              '<a class="btn btn-secondary btn-sm" href="#profile">Editar perfil de prestador →</a>' +
-            '</div>'
-          : actionCard('🛠️', 'Oferecer serviços',
-              'Você é eletricista, encanador, pintor, técnico? Cadastre-se como prestador e receba chamados de organizações que precisam dos seus serviços.',
-              'become-provider')
-        ) +
-
-        // Card 3: Pending invites
-        '<div class="card">' +
-          '<div style="font-size:2rem;margin-bottom:6px;">💌</div>' +
-          '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">Convites recebidos</div>' +
-          '<div class="text-small text-muted mb-4">Quando alguém convidar você pra gerenciar uma organização ou unidade, os convites aparecerão aqui.</div>' +
-          '<div id="invites-slot" class="text-small text-muted">Sem convites no momento.</div>' +
-        '</div>' +
+      // Aggregate stats (async — start with 0s)
+      '<div class="grid grid-cols-auto mb-4">' +
+        '<div class="stat-box"><div class="stat-value" id="hs-open">0</div><div class="stat-label">Abertos</div></div>' +
+        '<div class="stat-box"><div class="stat-value" id="hs-prog">0</div><div class="stat-label">Em andamento</div></div>' +
+        '<div class="stat-box"><div class="stat-value" id="hs-await">0</div><div class="stat-label">Aguardando</div></div>' +
+        '<div class="stat-box"><div class="stat-value" id="hs-done">0</div><div class="stat-label">Concluídos</div></div>' +
       '</div>' +
 
-      // Inline modal slot for action overlays
+      // Admin orgs section
+      '<div class="flex items-center justify-between mb-2" style="gap:12px;flex-wrap:wrap;">' +
+        '<h2 class="section-title" style="margin:0;">Organizações que administro</h2>' +
+        '<button class="btn btn-primary btn-sm" id="home-new-org">+ Nova organização</button>' +
+      '</div>' +
+      (adminOrgs.length === 0
+        ? '<div class="card mb-4">' +
+            '<div class="text-muted text-small">Você ainda não administra nenhuma organização. Crie a sua ou aguarde um convite.</div>' +
+          '</div>'
+        : '<div class="grid grid-cols-auto mb-4" id="home-admin-grid">' +
+            adminOrgs.map(function (m) { return homeOrgCard(m); }).join('') +
+          '</div>'
+      ) +
+
+      // Provider section
+      '<div class="flex items-center justify-between mb-2" style="gap:12px;flex-wrap:wrap;">' +
+        '<h2 class="section-title" style="margin:0;">Serviços que presto</h2>' +
+        (providerProfile
+          ? '<button class="btn btn-secondary btn-sm" id="home-edit-provider">✏️ Editar perfil</button>'
+          : '<button class="btn btn-secondary btn-sm" id="home-become-provider">+ Oferecer serviços</button>'
+        ) +
+      '</div>' +
+      (providerProfile
+        ? homeProviderCard(providerProfile)
+        : '<div class="card mb-4">' +
+            '<div class="text-muted text-small">Eletricistas, encanadores, pintores e outros profissionais podem receber chamados aqui. Cadastre-se para aparecer para as organizações que precisam dos seus serviços.</div>' +
+          '</div>'
+      ) +
+
       '<div id="action-modal-slot"></div>';
 
-    // Wire action cards
-    var btnCreateOrg = document.querySelector('[data-action="create-org"]');
-    if (btnCreateOrg) btnCreateOrg.addEventListener('click', openCreateOrgModal);
+    // Wire buttons
+    var btnNewOrg = document.getElementById('home-new-org');
+    if (btnNewOrg) btnNewOrg.addEventListener('click', openCreateOrgModal);
 
-    var btnBecomeProvider = document.querySelector('[data-action="become-provider"]');
+    var btnBecomeProvider = document.getElementById('home-become-provider');
     if (btnBecomeProvider) btnBecomeProvider.addEventListener('click', openBecomeProviderModal);
+
+    var btnEditProvider = document.getElementById('home-edit-provider');
+    if (btnEditProvider) btnEditProvider.addEventListener('click', openBecomeProviderModal);
+
+    // Wire org entry buttons
+    container.querySelectorAll('[data-enter-org]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        window._dashEnterOrg(btn.dataset.enterOrg);
+      });
+    });
+
+    // Async: resolve org names for memberships that don't have them cached
+    resolveOrgNames(adminOrgs);
+
+    // Async: load aggregate ticket stats from all orgs
+    loadHomeStats(memberships);
   }
 
-  function actionCard(icon, title, desc, action) {
-    return '<button class="card" data-action="' + action + '" ' +
-      'style="text-align:left;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;width:100%;">' +
-      '<div style="font-size:2rem;margin-bottom:6px;">' + icon + '</div>' +
-      '<div style="font-weight:700;font-size:1.05rem;margin-bottom:4px;">' + window._safeHtml(title) + '</div>' +
-      '<div class="text-small text-muted mb-4">' + window._safeHtml(desc) + '</div>' +
-      '<span class="btn btn-primary btn-sm" style="margin-top:auto;">Começar →</span>' +
-    '</button>';
+  function homeOrgCard(m) {
+    var name = m.orgName || m._resolvedName || ('Org ' + m.orgId.substring(0, 8));
+    return '<div class="card" data-org-card="' + window._safeAttr(m.orgId) + '" style="display:flex;flex-direction:column;gap:10px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<div style="font-size:1.5rem;flex-shrink:0;">🏢</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" class="org-name-label">' + window._safeHtml(name) + '</div>' +
+          '<div class="text-small text-muted">Administrador</div>' +
+        '</div>' +
+      '</div>' +
+      '<button class="btn btn-secondary btn-sm" data-enter-org="' + window._safeAttr(m.orgId) + '">Entrar →</button>' +
+    '</div>';
   }
 
-  function renderMembershipsBlock(memberships) {
-    return '' +
-      '<h2 class="section-title">Suas organizações</h2>' +
-      '<div class="grid grid-cols-auto">' +
-        memberships.map(function (m) {
-          return '<button class="card" onclick="window._dashEnterOrg(\'' + window._safeAttr(m.orgId) + '\')" ' +
-            'style="text-align:left;cursor:pointer;width:100%;">' +
-            '<div style="font-weight:700;">' + window._safeHtml(m.orgId.substring(0, 12)) + '…</div>' +
-            '<div class="text-small text-muted">' + roleLabel(m.role) + '</div>' +
-            '<span class="btn btn-secondary btn-sm mt-2">Entrar →</span>' +
-          '</button>';
-        }).join('') +
-      '</div>';
+  function homeProviderCard(p) {
+    var specs = (p.specialties || []).map(function (s) {
+      var spec = SPECIALTIES.find(function (x) { return x.id === s; });
+      return '<span class="badge badge-info">' + window._safeHtml(spec ? spec.label : s) + '</span>';
+    }).join('');
+    return '<div class="card mb-4">' +
+      (specs
+        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + specs + '</div>'
+        : '<div class="text-small text-muted">Nenhuma especialidade cadastrada.</div>'
+      ) +
+      (p.bio ? '<p class="text-small text-muted mt-2">' + window._safeHtml(p.bio) + '</p>' : '') +
+    '</div>';
+  }
+
+  // Fetch org names from Firestore for memberships that don't have orgName cached
+  function resolveOrgNames(memberships) {
+    memberships.forEach(function (m) {
+      if (m.orgName || m._resolvedName) return;
+      window.db.collection('organizations').doc(m.orgId).get()
+        .then(function (snap) {
+          if (!snap.exists) return;
+          var name = (snap.data() || {}).name;
+          if (!name) return;
+          m._resolvedName = name;
+          // Update in-place in DOM
+          var card = document.querySelector('[data-org-card="' + m.orgId + '"]');
+          if (card) {
+            var lbl = card.querySelector('.org-name-label');
+            if (lbl) lbl.textContent = name;
+          }
+        })
+        .catch(function (e) { console.warn('[home] resolveOrgName failed', m.orgId, e); });
+    });
+  }
+
+  // Aggregate ticket stats across all orgs the user belongs to
+  function loadHomeStats(memberships) {
+    var orgIds = memberships.map(function (m) { return m.orgId; }).filter(Boolean);
+    if (orgIds.length === 0) return;
+
+    var counts = { open: 0, prog: 0, await: 0, done: 0 };
+    var pending = orgIds.length;
+
+    orgIds.forEach(function (orgId) {
+      window.db.collection('tickets').where('orgId', '==', orgId).get()
+        .then(function (qs) {
+          qs.docs.forEach(function (doc) {
+            var s = (doc.data() || {}).status;
+            if (s === 'open' || s === 'published') counts.open++;
+            else if (s === 'assigned' || s === 'in_progress' || s === 'awaiting_confirmation') counts.prog++;
+            else if (s === 'awaiting_approval') counts.await++;
+            else if (s === 'approved') counts.done++;
+          });
+        })
+        .catch(function (e) { console.warn('[home] stats fetch failed', orgId, e); })
+        .finally(function () {
+          pending--;
+          if (pending === 0) applyHomeStats(counts);
+        });
+    });
+  }
+
+  function applyHomeStats(counts) {
+    var elOpen  = document.getElementById('hs-open');
+    var elProg  = document.getElementById('hs-prog');
+    var elAwait = document.getElementById('hs-await');
+    var elDone  = document.getElementById('hs-done');
+    if (elOpen)  elOpen.textContent  = counts.open;
+    if (elProg)  elProg.textContent  = counts.prog;
+    if (elAwait) elAwait.textContent = counts.await;
+    if (elDone)  elDone.textContent  = counts.done;
   }
 
   // Switch to a specific org and re-render
@@ -243,32 +327,40 @@
   var providerSpecs = [];
 
   function openBecomeProviderModal() {
-    providerSpecs = [];
+    providerSpecs = (window.AppStore.providerProfile && window.AppStore.providerProfile.specialties)
+      ? window.AppStore.providerProfile.specialties.slice()
+      : [];
     var slot = document.getElementById('action-modal-slot');
-    if (!slot) return;
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = 'action-modal-slot';
+      document.body.appendChild(slot);
+    }
     slot.innerHTML = '' +
       '<div class="modal-overlay active">' +
         '<div class="modal">' +
           '<div class="modal-header">' +
-            '<h2 class="modal-title">🛠️ Cadastrar como prestador</h2>' +
+            '<h2 class="modal-title">🛠️ ' + (window.AppStore.providerProfile ? 'Editar perfil de prestador' : 'Cadastrar como prestador') + '</h2>' +
             '<button class="modal-close" onclick="window._closeActionModal()">×</button>' +
           '</div>' +
           '<div class="form-group">' +
             '<div class="form-label">Especialidades (selecione uma ou mais)</div>' +
             '<div id="prov-spec-pills" style="display:flex;flex-wrap:wrap;gap:8px;">' +
               SPECIALTIES.map(function (s) {
-                return '<button class="badge" data-spec="' + s.id + '" style="cursor:pointer;font-size:0.9rem;padding:8px 14px;background:rgba(255,255,255,0.06);color:var(--text-secondary);border:2px solid transparent;">' +
+                var active = providerSpecs.indexOf(s.id) !== -1;
+                return '<button class="badge" data-spec="' + s.id + '" style="cursor:pointer;font-size:0.9rem;padding:8px 14px;' +
+                  (active ? 'background:rgba(30,64,175,0.4);color:white;border:2px solid var(--primary);' : 'background:rgba(255,255,255,0.06);color:var(--text-secondary);border:2px solid transparent;') + '">' +
                   s.label + '</button>';
               }).join('') +
             '</div>' +
           '</div>' +
           '<div class="form-group">' +
             '<label class="form-label" for="prov-bio">Sobre você (opcional)</label>' +
-            '<textarea id="prov-bio" rows="3" placeholder="Ex.: 10 anos de experiência em manutenção predial. Atendo emergências."></textarea>' +
+            '<textarea id="prov-bio" rows="3" placeholder="Ex.: 10 anos de experiência em manutenção predial. Atendo emergências.">' + window._safeHtml((window.AppStore.providerProfile && window.AppStore.providerProfile.bio) || '') + '</textarea>' +
           '</div>' +
           '<div class="flex gap-2" style="justify-content:flex-end;">' +
             '<button class="btn btn-ghost" onclick="window._closeActionModal()">Cancelar</button>' +
-            '<button class="btn btn-primary" id="prov-confirm">Cadastrar</button>' +
+            '<button class="btn btn-primary" id="prov-confirm">' + (window.AppStore.providerProfile ? 'Salvar alterações' : 'Cadastrar') + '</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -319,7 +411,7 @@
       });
       window.hideLoading();
       window._closeActionModal();
-      window.showNotification('Pronto!', 'Você está listado como prestador.', 'success');
+      window.showNotification('Pronto!', window.AppStore.providerProfile ? 'Perfil atualizado.' : 'Você está listado como prestador.', 'success');
       setTimeout(function () { window.routerRender(); }, 500);
     } catch (err) {
       window.hideLoading();

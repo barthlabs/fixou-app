@@ -224,18 +224,10 @@
       window.AppStore.listenMemberships();
       window.AppStore.listenProviderProfile(fbUser.uid);
 
-      // Restore last org or pick first
-      var stored = null;
-      try { stored = localStorage.getItem('fixou_currentOrgId'); } catch (e) {}
-
-      // Wait one tick for memberships listener to fire, then route
+      // Always start at home (no org selected) so the user sees
+      // all their orgs and services and consciously picks one to enter.
+      // The org switcher lets them jump between orgs at any time.
       setTimeout(function () {
-        var memberships = window.AppStore.memberships || [];
-        if (stored && memberships.find(function (m) { return m.orgId === stored; })) {
-          window.AppStore.setCurrentOrg(stored);
-        } else if (memberships.length > 0) {
-          window.AppStore.setCurrentOrg(memberships[0].orgId);
-        }
         syncTopbarOrg();
 
         // Decide initial route

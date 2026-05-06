@@ -22,7 +22,7 @@
       '<div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px;">' +
         '<div>' +
           '<h1 class="page-title" style="margin-bottom:2px;">' + window._safeHtml((window.AppStore.currentOrg || {}).name || '—') + '</h1>' +
-          '<div class="text-muted text-small">' + roleLabel(role) + ' · ' + window._safeHtml((window.AppStore.currentOrg || {}).type || '') + '</div>' +
+          '<div class="text-muted text-small">' + roleLabel(role) + '</div>' +
         '</div>' +
         (canCreateTicket(role) ? '<button class="btn btn-primary" id="btn-new-ticket">+ Novo chamado</button>' : '') +
       '</div>' +
@@ -168,16 +168,6 @@
             '<input type="text" id="co-name" placeholder="Ex.: Lojas Bella, Condomínio Solar, Casa de Praia">' +
             '<div class="form-help">Pode ser sua casa, sua empresa, um condomínio que você administra etc.</div>' +
           '</div>' +
-          '<div class="form-group">' +
-            '<label class="form-label" for="co-type">Tipo</label>' +
-            '<select id="co-type">' +
-              '<option value="lojas">Rede de lojas</option>' +
-              '<option value="condominio">Condomínio</option>' +
-              '<option value="clube">Clube</option>' +
-              '<option value="casa">Residência</option>' +
-              '<option value="outro">Outro</option>' +
-            '</select>' +
-          '</div>' +
           '<div class="flex gap-2" style="justify-content:flex-end;">' +
             '<button class="btn btn-ghost" onclick="window._closeActionModal()">Cancelar</button>' +
             '<button class="btn btn-primary" id="co-confirm">Criar</button>' +
@@ -201,13 +191,12 @@
 
   async function handleCreateOrg() {
     var name = (document.getElementById('co-name') || {}).value;
-    var type = (document.getElementById('co-type') || {}).value;
     name = (name || '').trim();
     if (!name) { window.showNotification('Atenção', 'Informe um nome', 'warning'); return; }
 
     window.showLoading('Criando organização…');
     try {
-      var orgId = await window.AppStore.createOrganization({ name: name, type: type || 'outro' });
+      var orgId = await window.AppStore.createOrganization({ name: name });
       var u = window.AppStore.currentUser;
       if (u && u.uid) await window.AppStore.saveUserDoc(u.uid, { defaultOrgId: orgId });
       window.hideLoading();

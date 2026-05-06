@@ -193,13 +193,14 @@ window.FIXOU_VERSION = '0.1.0-alpha';
       var orgPayload = {
         id: orgId,
         name: data.name,
-        type: data.type || 'outro',
         ownerUid: uid,
         plan: 'free',
         unitCount: 0,
         memberCount: 1,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
+      // Optional `type` only if provided — kept for forward-compat
+      if (data.type) orgPayload.type = data.type;
 
       var membershipPayload = {
         uid: uid,

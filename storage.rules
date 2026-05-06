@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function under5MB() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Ticket photos: any signed-in user can read; only signed-in users can write images <5MB
+    // Path: /tickets/{orgId}/{ticketId}/{fileName}
+    match /tickets/{orgId}/{ticketId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImage() && under5MB();
+    }
+
+    // User avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isImage() && under5MB();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Provider profile photos
+    match /providers/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && isImage() && under5MB();
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

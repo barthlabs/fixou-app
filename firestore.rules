@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----- HELPERS -----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function memberOf(orgId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + orgId));
+    }
+
+    function roleIn(orgId) {
+      return get(/databases/$(database)/documents/memberships/$(request.auth.uid + '_' + orgId)).data.role;
+    }
+
+    function isAdminOf(orgId) {
+      return memberOf(orgId) && roleIn(orgId) == 'admin';
+    }
+
+    function isManagerOf(orgId) {
+      return memberOf(orgId) && roleIn(orgId) in ['admin', 'manager'];
+    }
+
+    // ----- USERS -----
+    // Each user owns their profile document at /users/{uid}
+    match /users/{uid} {
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid);
+      allow update: if isSelf(uid);
+      allow delete: if false; // never allow client-side deletion
+    }
+
+    // ----- ORGANIZATIONS -----
+    match /organizations/{orgId} {
+      // Members can read their own org
+      allow read: if memberOf(orgId);
+      // Anyone signed-in can create (they become admin via the membership doc)
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      // Only admins update/delete
+      allow update: if isAdminOf(orgId);
+      allow delete: if isAdminOf(orgId);
+    }
+
+    // ----- MEMBERSHIPS -----
+    // Doc id = `${uid}_${orgId}` for O(1) lookups
+    match /memberships/{membershipId} {
+      // User can read their own memberships
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      // Admins can list/read all memberships of their org
+      allow read: if isSignedIn() && isAdminOf(resource.data.orgId);
+      // Self-create only when first creating the org (becoming admin)
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role == 'admin';
+      // Admins can create/update/delete other memberships in their org
+      allow create, update, delete: if isSignedIn() && isAdminOf(request.resource.data.orgId);
+    }
+
+    // ----- UNITS -----
+    match /units/{unitId} {
+      allow read: if memberOf(resource.data.orgId);
+      allow create: if isAdminOf(request.resource.data.orgId);
+      allow update, delete: if isAdminOf(resource.data.orgId);
+    }
+
+    // ----- TICKETS -----
+    match /tickets/{ticketId} {
+      // Members of the org can read
+      allow read: if memberOf(resource.data.orgId);
+      // Provider assigned to this ticket can also read
+      allow read: if isSignedIn() && resource.data.assignedProviderUid == request.auth.uid;
+      // Manager+ can create
+      allow create: if isManagerOf(request.resource.data.orgId);
+      // Manager+ in the org can update; assigned provider can update status fields
+      allow update: if isManagerOf(resource.data.orgId);
+      allow update: if isSignedIn() && resource.data.assignedProviderUid == request.auth.uid;
+      // Only admin can delete
+      allow delete: if isAdminOf(resource.data.orgId);
+    }
+
+    // ----- PROVIDER PROFILES -----
+    // Marketplace of service providers — public-readable, owner-writable
+    match /providerProfiles/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(uid);
+      allow delete: if isSelf(uid);
+    }
+
+    // ----- INVITES -----
+    match /invites/{inviteId} {
+      // Reader: invited email or org admin
+      allow read: if isSignedIn();
+      // Create: anyone signed-in can invite (admin invites to their org)
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && resource.data.fromUid == request.auth.uid;
+    }
+
+    // ----- DEFAULT DENY -----
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

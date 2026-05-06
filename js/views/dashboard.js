@@ -19,6 +19,9 @@
     if (!hasOrg) return renderHome(container);
 
     container.innerHTML = '' +
+      '<div class="mb-3">' +
+        '<button class="btn btn-ghost btn-sm" id="btn-back-home">← Início</button>' +
+      '</div>' +
       '<div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:12px;">' +
         '<div>' +
           '<h1 class="page-title" style="margin-bottom:2px;">' + window._safeHtml((window.AppStore.currentOrg || {}).name || '—') + '</h1>' +
@@ -39,6 +42,12 @@
       (role === 'admin' ? '<div class="mt-4 flex gap-2"><a class="btn btn-secondary" href="#admin">⚙️ Administrar organização</a></div>' : '');
 
     // wire
+    var backBtn = document.getElementById('btn-back-home');
+    if (backBtn) backBtn.addEventListener('click', function () {
+      window.AppStore.setCurrentOrg(null);
+      window.routerRender();
+    });
+
     var newBtn = document.getElementById('btn-new-ticket');
     if (newBtn) newBtn.addEventListener('click', function () { window.location.hash = '#ticket/new'; });
 

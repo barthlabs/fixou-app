@@ -1,25 +1,46 @@
 // fixou.app — Login / Landing page
+// Layout copiado fielmente do scoreplace.app (setupLoginModal → page completa)
 
 (function () {
   'use strict';
 
-  var _emailMode = 'signin'; // 'signin' | 'signup' | 'reset'
-  var _lpStep    = 'unified'; // 'unified' | 'email-sent' | 'sms-code'
-  var _lpSentEmail = '';
-  var _lpSentPhone = '';
+  // ── Utilitários ────────────────────────────────────────────────────────────────
+
+  var _phoneCountries = [
+    { code: '55',  flag: '🇧🇷', name: 'Brasil'    },
+    { code: '1',   flag: '🇺🇸', name: 'EUA'       },
+    { code: '351', flag: '🇵🇹', name: 'Portugal'  },
+    { code: '54',  flag: '🇦🇷', name: 'Argentina' },
+    { code: '598', flag: '🇺🇾', name: 'Uruguai'   },
+    { code: '595', flag: '🇵🇾', name: 'Paraguai'  },
+    { code: '56',  flag: '🇨🇱', name: 'Chile'     },
+    { code: '57',  flag: '🇨🇴', name: 'Colômbia'  },
+    { code: '34',  flag: '🇪🇸', name: 'Espanha'   },
+    { code: '44',  flag: '🇬🇧', name: 'UK'        }
+  ];
+
+  function _detectInputModeRaw(value) {
+    if (!value) return null;
+    var v = String(value).trim();
+    if (v.indexOf('@') !== -1) return 'email';
+    var digits = v.replace(/\D/g, '');
+    if (digits.length >= 8 && digits.length <= 15) return 'phone';
+    return null;
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────────
 
   window.renderLogin = function (container) {
-    _emailMode   = 'signin';
-    _lpStep      = 'unified';
-    _lpSentEmail = '';
-    _lpSentPhone = '';
     container.innerHTML = _buildPage();
     _wire();
   };
 
-  // ── Page shell ────────────────────────────────────────────────────────────────
-
   function _buildPage() {
+    var countryOpts = _phoneCountries.map(function (c) {
+      return '<option value="' + c.code + '"' + (c.code === '55' ? ' selected' : '') + '>' +
+             c.flag + ' +' + c.code + '</option>';
+    }).join('');
+
     return (
       '<style>' +
       '.lp-wrap{min-height:calc(100vh - var(--topbar-h,0px));display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg-darkest);}' +
@@ -28,57 +49,16 @@
       '.lp-logo{font-size:3rem;display:block;margin-bottom:10px;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5));}' +
       '.lp-title{font-size:1.7rem;font-weight:900;background:linear-gradient(90deg,#bfdbfe,#f0f9ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px;}' +
       '.lp-sub{color:rgba(255,255,255,0.65);font-size:0.85rem;}' +
-      '.lp-body{padding:24px;}' +
-      '.lp-section-label{font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}' +
-
-      /* ── Unified row ── */
-      '.lp-unified-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px;}' +
-      '.lp-unified-row.has-ddi{grid-template-columns:auto 1fr auto;}' +
-      '.lp-ddi-select{background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:10px 8px;font-size:0.88rem;color:var(--text-primary);outline:none;cursor:pointer;white-space:nowrap;}' +
-      '.lp-input{width:100%;background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:10px 12px;font-size:0.88rem;color:var(--text-primary);outline:none;transition:border-color .15s;box-sizing:border-box;}' +
-      '.lp-input:focus{border-color:var(--primary-light);}' +
-      '.lp-btn-send{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 18px;font-size:0.85rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s;}' +
-      '.lp-btn-send:hover{opacity:.88;}' +
-      '.lp-btn-send:disabled{opacity:.5;cursor:not-allowed;}' +
-      '.lp-helper{font-size:0.72rem;color:var(--text-dim);margin-bottom:4px;line-height:1.4;}' +
-
-      /* ── Panels ── */
-      '.lp-panel{background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.25);border-radius:var(--radius);padding:16px;margin-bottom:4px;}' +
-      '.lp-panel-icon{font-size:1.8rem;display:block;margin-bottom:8px;}' +
-      '.lp-panel-title{font-size:0.95rem;font-weight:700;color:var(--text-primary);margin-bottom:4px;}' +
-      '.lp-panel-sub{font-size:0.78rem;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;}' +
-      '.lp-panel-links{display:flex;gap:16px;font-size:0.74rem;}' +
-      '.lp-panel-links a{color:var(--primary-light);cursor:pointer;text-decoration:underline;}' +
-      '.lp-code-row{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;}' +
-      '.lp-code-input{background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:12px;font-size:1.1rem;font-weight:700;letter-spacing:.25em;color:var(--text-primary);outline:none;text-align:center;box-sizing:border-box;}' +
-      '.lp-code-input:focus{border-color:var(--primary-light);}' +
-      '.lp-btn-verify{background:linear-gradient(135deg,#059669,#047857);color:#fff;border:none;border-radius:var(--radius-sm);padding:12px 20px;font-size:0.88rem;font-weight:700;cursor:pointer;transition:opacity .15s;}' +
-      '.lp-btn-verify:hover{opacity:.88;}' +
-
-      /* ── Google ── */
-      '.lp-google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f2937;border:none;border-radius:var(--radius);padding:13px 20px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 10px rgba(0,0,0,0.35);}' +
-      '.lp-google-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.45);}' +
-
-      /* ── Divider ── */
-      '.lp-divider{display:flex;align-items:center;gap:12px;margin:18px 0;}' +
+      '.lp-body{padding:20px 24px 24px;}' +
+      '.lp-fc{width:100%;background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:11px 12px;font-size:0.88rem;color:var(--text-primary);outline:none;transition:border-color .15s;box-sizing:border-box;}' +
+      '.lp-fc:focus{border-color:var(--primary-light);}' +
+      '.lp-label-sm{font-size:0.78rem;font-weight:600;color:var(--text-primary);margin-bottom:6px;}' +
+      '.lp-helper{font-size:0.72rem;color:var(--text-muted);margin-top:6px;line-height:1.4;}' +
+      '.lp-divider{display:flex;align-items:center;gap:12px;margin:14px 0;}' +
       '.lp-divider::before,.lp-divider::after{content:"";flex:1;height:1px;background:var(--border);}' +
       '.lp-divider span{color:var(--text-dim);font-size:0.7rem;}' +
-
-      /* ── Email/password tabs ── */
-      '.lp-mode-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}' +
-      '.lp-tab{flex:1;padding:8px 4px;font-size:0.78rem;font-weight:600;border:none;background:transparent;color:var(--text-muted);cursor:pointer;transition:background .15s,color .15s;}' +
-      '.lp-tab.active{background:var(--primary);color:#fff;}' +
-      '.lp-tab:not(.active):hover{background:var(--bg-card-hover);color:var(--text-primary);}' +
-      '.lp-form-group{margin-bottom:10px;}' +
-      '.lp-label{font-size:0.75rem;color:var(--text-secondary);margin-bottom:4px;display:block;}' +
-      '.lp-btn-primary{width:100%;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);padding:12px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;}' +
-      '.lp-btn-primary:hover{background:var(--primary-hover);transform:translateY(-1px);}' +
-      '.lp-links{display:flex;justify-content:center;gap:16px;margin-top:10px;font-size:0.75rem;}' +
-      '.lp-links a{color:var(--text-muted);cursor:pointer;text-decoration:none;}' +
-      '.lp-links a:hover{color:var(--primary-light);text-decoration:underline;}' +
-      '.lp-terms{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:0.68rem;color:var(--text-dim);text-align:center;line-height:1.5;}' +
-      '.lp-terms a{color:var(--text-muted);}' +
-      '.lp-terms a:hover{color:var(--primary-light);}' +
+      '.lp-terms{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:0.7rem;color:var(--text-muted);text-align:center;line-height:1.5;}' +
+      '.lp-terms a{color:var(--primary-light);}' +
       '</style>' +
 
       '<div class="lp-wrap">' +
@@ -91,84 +71,146 @@
             '<div class="lp-sub">Gestão de manutenção simplificada</div>' +
           '</div>' +
 
-          // ── Body ──
-          '<div class="lp-body">' +
+          '<div class="lp-body" id="lp-body">' +
 
-            // === UNIFIED INPUT — always visible until step changes ===
-            '<div id="lp-unified-section">' +
-              '<div class="lp-section-label">Entrar com 1 clique</div>' +
-              '<div class="lp-unified-row" id="lp-unified-row">' +
-                '<input class="lp-input" type="text" id="lp-unified-input"' +
-                  ' autocomplete="email" placeholder="E-mail ou celular com DDD" autocorrect="off"' +
-                  ' autocapitalize="none" spellcheck="false"' +
-                  ' oninput="window._lpDetectInputMode()"' +
-                  ' onkeydown="if(event.key===\'Enter\')window._lpSendUnified()">' +
-                '<button class="lp-btn-send" id="lp-unified-btn" onclick="window._lpSendUnified()">Enviar</button>' +
-              '</div>' +
-              '<p class="lp-helper" id="lp-helper-text">Aceita e-mail (link mágico) ou celular com DDD (código SMS). Para celular, o seletor de país aparece automaticamente — padrão 🇧🇷 +55.</p>' +
-            '</div>' +
-
-            // === EMAIL SENT PANEL (hidden initially) ===
-            '<div id="lp-email-sent-panel" hidden>' +
-              '<div class="lp-panel">' +
-                '<span class="lp-panel-icon">📬</span>' +
-                '<div class="lp-panel-title">Link enviado!</div>' +
-                '<div class="lp-panel-sub" id="lp-email-sent-sub">Verifique seu e-mail e clique no link para entrar. Cheque também a pasta de spam.</div>' +
-                '<div class="lp-panel-links">' +
-                  '<a onclick="window._lpResendMagicLink()">Reenviar link</a>' +
-                  '<a onclick="window._lpBackToUnified()">Usar outro método</a>' +
+            // ── 1. Entrar com 1 clique ──────────────────────────────────────
+            '<div id="lp-unified-step" style="margin-bottom:4px;">' +
+              '<div class="lp-label-sm">✉️📱 Entrar com 1 clique</div>' +
+              '<form novalidate onsubmit="event.preventDefault(); window._lpSendUnified();">' +
+                '<div id="lp-unified-row" style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;">' +
+                  '<select id="lp-unified-country" aria-label="DDI" class="lp-fc"' +
+                    ' style="display:none;width:auto;min-width:0;font-size:0.82rem;padding:9px 6px;cursor:pointer;">' +
+                    countryOpts +
+                  '</select>' +
+                  '<input type="text" id="lp-unified" class="lp-fc"' +
+                    ' placeholder="seu@email.com  ou  11 99999-8888"' +
+                    ' autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"' +
+                    ' oninput="window._lpDetectMode()"' +
+                    ' style="width:100%;min-width:0;box-sizing:border-box;font-size:0.92rem;padding:11px 12px;">' +
+                  '<button type="submit"' +
+                    ' style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 16px;font-size:0.78rem;font-weight:700;white-space:nowrap;cursor:pointer;width:auto;justify-self:end;">' +
+                    'Enviar' +
+                  '</button>' +
                 '</div>' +
+              '</form>' +
+              '<div id="lp-unified-helper" class="lp-helper">' +
+                'Aceita <b>e-mail</b> (recebe link mágico) ou <b>celular com DDD</b> (recebe SMS com código). Pra celular, o seletor de país aparece automaticamente — padrão 🇧🇷 +55.' +
               '</div>' +
+              // hidden inputs que os handlers leem
+              '<input type="hidden" id="lp-email-ml">' +
+              '<input type="hidden" id="lp-phone-num">' +
+              '<input type="hidden" id="lp-phone-country" value="55">' +
             '</div>' +
 
-            // === SMS CODE PANEL (hidden initially) ===
-            '<div id="lp-sms-panel" hidden>' +
-              '<div class="lp-panel">' +
-                '<span class="lp-panel-icon">📱</span>' +
-                '<div class="lp-panel-title">Código enviado</div>' +
-                '<div class="lp-panel-sub" id="lp-sms-sub">Digite o código de 6 dígitos enviado por SMS.</div>' +
-                '<div class="lp-code-row">' +
-                  '<input class="lp-code-input" type="tel" id="lp-sms-code" maxlength="6" placeholder="000000"' +
+            // ── 2. Verificar código SMS (oculto) ─────────────────────────────
+            '<div id="lp-sms-code-step" style="display:none;margin-bottom:4px;">' +
+              '<div class="lp-label-sm">📱 Confirme o código</div>' +
+              '<p style="color:var(--text-muted);font-size:0.78rem;margin-bottom:6px;">Digite o código de 6 dígitos recebido por SMS:</p>' +
+              '<form onsubmit="event.preventDefault(); window._lpVerifyCode();">' +
+                '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;">' +
+                  '<input type="tel" id="lp-sms-code" class="lp-fc"' +
+                    ' placeholder="123456" maxlength="6" inputmode="numeric" autocomplete="one-time-code"' +
                     ' oninput="this.value=this.value.replace(/[^0-9]/g,\'\')"' +
-                    ' onkeydown="if(event.key===\'Enter\')window._lpVerifyCode()">' +
-                  '<button class="lp-btn-verify" onclick="window._lpVerifyCode()">Verificar</button>' +
+                    ' style="width:100%;min-width:0;box-sizing:border-box;text-align:center;font-size:1.1rem;letter-spacing:6px;font-weight:700;">' +
+                  '<button type="submit"' +
+                    ' style="background:linear-gradient(135deg,#059669,#047857);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 14px;font-size:0.78rem;font-weight:700;white-space:nowrap;cursor:pointer;width:auto;justify-self:end;">' +
+                    'Verificar' +
+                  '</button>' +
                 '</div>' +
-                '<div class="lp-panel-links">' +
-                  '<a onclick="window._lpResendSMS()">Reenviar SMS</a>' +
-                  '<a onclick="window._lpBackToUnified()">Usar outro método</a>' +
-                '</div>' +
+              '</form>' +
+              '<div style="text-align:center;margin-top:8px;">' +
+                '<a href="#" onclick="event.preventDefault();window._lpResendSMS();" style="color:var(--text-muted);font-size:0.72rem;">Reenviar</a>' +
+                '<span style="color:var(--text-muted);font-size:0.72rem;margin:0 6px;">|</span>' +
+                '<a href="#" onclick="event.preventDefault();window._lpResetUnified();" style="color:var(--text-muted);font-size:0.72rem;">Voltar</a>' +
               '</div>' +
             '</div>' +
 
-            // ── Divider ──
+            '<div id="recaptcha-container"></div>' +
+
+            // ── Divisor ──────────────────────────────────────────────────────
             '<div class="lp-divider"><span>ou</span></div>' +
 
-            // Google CTA
-            '<div class="lp-section-label">Entrar com</div>' +
-            '<button class="lp-google-btn" id="lp-google-btn">' +
-              '<svg width="18" height="18" viewBox="0 0 48 48">' +
-                '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
-                '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
-                '<path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.9 7.34 2.44 10.5l8.09-5.91z"/>' +
-                '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
-              '</svg>' +
-              'Continuar com Google' +
-            '</button>' +
+            // ── 3. E-mail e Senha ─────────────────────────────────────────────
+            '<div style="margin-bottom:4px;">' +
+              '<div class="lp-label-sm">🔑 E-mail e Senha</div>' +
 
-            // ── Divider ──
-            '<div class="lp-divider"><span>ou com e-mail e senha</span></div>' +
+              // Modo login
+              '<div id="lp-email-login-mode">' +
+                '<form id="lp-form-login" novalidate onsubmit="event.preventDefault(); window._lpEmailLogin();">' +
+                  '<div style="margin-bottom:6px;">' +
+                    '<input type="email" id="lp-email" class="lp-fc" placeholder="seu@email.com" required' +
+                      ' style="font-size:0.85rem;">' +
+                  '</div>' +
+                  '<div style="margin-bottom:6px;">' +
+                    '<input type="password" id="lp-password" class="lp-fc" placeholder="Senha" required minlength="6"' +
+                      ' autocomplete="current-password" style="font-size:0.85rem;">' +
+                  '</div>' +
+                  '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;">' +
+                    '<button type="submit"' +
+                      ' style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 18px;font-size:0.8rem;font-weight:700;white-space:nowrap;cursor:pointer;">' +
+                      'Entrar' +
+                    '</button>' +
+                  '</div>' +
+                '</form>' +
+                '<div style="text-align:center;margin-top:6px;font-size:0.75rem;">' +
+                  '<a href="#" onclick="event.preventDefault();window._lpToggleEmailMode(\'register\')"' +
+                    ' style="color:var(--primary-light);font-weight:600;">Criar conta</a>' +
+                  '<span style="color:var(--text-muted);margin:0 8px;">|</span>' +
+                  '<a href="#" onclick="event.preventDefault();window._lpPasswordReset()"' +
+                    ' style="color:var(--text-muted);">Esqueci a senha</a>' +
+                '</div>' +
+              '</div>' +
 
-            // Mode tabs: Entrar / Criar conta / Recuperar
-            '<div class="lp-mode-tabs">' +
-              '<button class="lp-tab active" id="lp-tab-signin" onclick="window._lpSetMode(\'signin\')">Entrar</button>' +
-              '<button class="lp-tab" id="lp-tab-signup" onclick="window._lpSetMode(\'signup\')">Criar conta</button>' +
-              '<button class="lp-tab" id="lp-tab-reset" onclick="window._lpSetMode(\'reset\')">Recuperar senha</button>' +
+              // Modo cadastro (oculto)
+              '<div id="lp-email-register-mode" style="display:none;">' +
+                '<form id="lp-form-register" novalidate onsubmit="event.preventDefault(); window._lpEmailRegister();">' +
+                  '<div style="margin-bottom:6px;">' +
+                    '<input type="text" id="lp-name" class="lp-fc" placeholder="Seu nome" required' +
+                      ' autocomplete="name" style="font-size:0.85rem;">' +
+                  '</div>' +
+                  '<div style="margin-bottom:6px;">' +
+                    '<input type="email" id="lp-email-reg" class="lp-fc" placeholder="seu@email.com" required' +
+                      ' autocomplete="email" style="font-size:0.85rem;">' +
+                  '</div>' +
+                  '<div style="margin-bottom:6px;">' +
+                    '<input type="password" id="lp-password-reg" class="lp-fc" placeholder="Senha (mín. 6)" required minlength="6"' +
+                      ' autocomplete="new-password" style="font-size:0.85rem;">' +
+                  '</div>' +
+                  '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;">' +
+                    '<button type="submit"' +
+                      ' style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:8px 18px;font-size:0.8rem;font-weight:700;white-space:nowrap;cursor:pointer;">' +
+                      'Criar Conta' +
+                    '</button>' +
+                  '</div>' +
+                '</form>' +
+                '<div style="text-align:center;margin-top:6px;">' +
+                  '<a href="#" onclick="event.preventDefault();window._lpToggleEmailMode(\'login\')"' +
+                    ' style="color:var(--primary-light);font-size:0.75rem;font-weight:600;">Já tem conta? Entrar</a>' +
+                '</div>' +
+              '</div>' +
+
+            '</div>' + // fim E-mail e Senha
+
+            // ── Divisor ──────────────────────────────────────────────────────
+            '<div class="lp-divider"><span>ou</span></div>' +
+
+            // ── 4. Google ─────────────────────────────────────────────────────
+            '<div style="margin-bottom:4px;">' +
+              '<button type="button" id="lp-google-btn"' +
+                ' style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f2937;border:none;border-radius:var(--radius);padding:13px 20px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 10px rgba(0,0,0,0.35);"' +
+                ' onmouseover="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 6px 20px rgba(0,0,0,0.45)\'"' +
+                ' onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 10px rgba(0,0,0,0.35)\'">' +
+                '<svg width="18" height="18" viewBox="0 0 48 48">' +
+                  '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
+                  '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
+                  '<path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.9 7.34 2.44 10.5l8.09-5.91z"/>' +
+                  '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
+                '</svg>' +
+                'Entrar com Google' +
+              '</button>' +
             '</div>' +
 
-            // Email form container
-            '<div id="lp-email-form">' + _buildEmailForm() + '</div>' +
-
-            // Terms
+            // ── Termos ────────────────────────────────────────────────────────
             '<div class="lp-terms">' +
               'Ao continuar, você concorda com os ' +
               '<a href="#">Termos de Uso</a>' +
@@ -177,182 +219,145 @@
             '</div>' +
 
           '</div>' + // .lp-body
+
         '</div>' + // .lp-card
-      '</div>' + // .lp-wrap
-
-      // reCAPTCHA (invisible) — must be in DOM before sendPhoneSMS
-      '<div id="recaptcha-container"></div>'
+      '</div>'    // .lp-wrap
     );
   }
 
-  // ── Email/password form (by mode) ─────────────────────────────────────────────
+  // ── Detecção de modo (email / phone) ──────────────────────────────────────────
 
-  function _buildEmailForm() {
-    if (_emailMode === 'signin') {
-      return (
-        '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
-          '<div class="lp-form-group">' +
-            '<label class="lp-label" for="lp-email">E-mail</label>' +
-            '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
-          '</div>' +
-          '<div class="lp-form-group">' +
-            '<label class="lp-label" for="lp-password">Senha</label>' +
-            '<input class="lp-input" type="password" id="lp-password" autocomplete="current-password" placeholder="••••••••" required>' +
-          '</div>' +
-          '<button class="lp-btn-primary" type="submit">Entrar</button>' +
-          '<div class="lp-links">' +
-            '<a onclick="window._lpSetMode(\'signup\')">Criar conta</a>' +
-            '<a onclick="window._lpSetMode(\'reset\')">Esqueci a senha</a>' +
-          '</div>' +
-        '</form>'
-      );
-    }
-
-    if (_emailMode === 'signup') {
-      return (
-        '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
-          '<div class="lp-form-group">' +
-            '<label class="lp-label" for="lp-name">Nome</label>' +
-            '<input class="lp-input" type="text" id="lp-name" autocomplete="name" placeholder="Como prefere ser chamado" required>' +
-          '</div>' +
-          '<div class="lp-form-group">' +
-            '<label class="lp-label" for="lp-email">E-mail</label>' +
-            '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
-          '</div>' +
-          '<div class="lp-form-group">' +
-            '<label class="lp-label" for="lp-password">Senha</label>' +
-            '<input class="lp-input" type="password" id="lp-password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required minlength="6">' +
-          '</div>' +
-          '<button class="lp-btn-primary" type="submit">Criar conta</button>' +
-          '<div class="lp-links">' +
-            '<a onclick="window._lpSetMode(\'signin\')">Já tenho conta</a>' +
-          '</div>' +
-        '</form>'
-      );
-    }
-
-    // reset
-    return (
-      '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
-        '<div class="lp-form-group">' +
-          '<label class="lp-label" for="lp-email">E-mail</label>' +
-          '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
-        '</div>' +
-        '<button class="lp-btn-primary" type="submit">Enviar link de recuperação</button>' +
-        '<div class="lp-links">' +
-          '<a onclick="window._lpSetMode(\'signin\')">Voltar ao login</a>' +
-        '</div>' +
-      '</form>'
-    );
-  }
-
-  // ── Unified input: auto-detect email vs phone ────────────────────────────────
-
-  window._lpDetectInputMode = function () {
-    var input = document.getElementById('lp-unified-input');
-    var row   = document.getElementById('lp-unified-row');
-    if (!input || !row) return;
-
-    var val    = input.value;
-    var digits = val.replace(/\D/g, '');
-    var isPhone = digits.length >= 8 && !val.includes('@');
-
-    var ddiWrap = document.getElementById('lp-ddi-wrap');
-
-    if (isPhone) {
-      // Show DDI selector
-      if (!ddiWrap) {
-        ddiWrap = _buildDDISelect();
-        row.insertBefore(ddiWrap, input);
+  window._lpDetectMode = function () {
+    var unifiedEl  = document.getElementById('lp-unified');
+    var countryEl  = document.getElementById('lp-unified-country');
+    var helperEl   = document.getElementById('lp-unified-helper');
+    var rowEl      = document.getElementById('lp-unified-row');
+    if (!unifiedEl) return;
+    var mode = _detectInputModeRaw(unifiedEl.value);
+    if (countryEl) countryEl.style.display = (mode === 'phone') ? '' : 'none';
+    if (rowEl)     rowEl.style.gridTemplateColumns = (mode === 'phone') ? 'auto 1fr auto' : '1fr auto';
+    if (helperEl) {
+      if (mode === 'email') {
+        helperEl.innerHTML = '✉️ Vamos enviar um <b>link de acesso</b> pro seu e-mail. Clique no link e entra direto.';
+      } else if (mode === 'phone') {
+        var ddi = (countryEl && countryEl.value) || '55';
+        helperEl.innerHTML = '📱 Vamos enviar <b>SMS com código</b> pro <b>+' + ddi + '</b> + o número que você digitou.';
+      } else {
+        helperEl.innerHTML = 'Aceita <b>e-mail</b> (recebe link mágico) ou <b>celular com DDD</b> (recebe SMS com código). Pra celular, o seletor de país aparece automaticamente — padrão 🇧🇷 +55.';
       }
-      row.className = 'lp-unified-row has-ddi';
-    } else {
-      // Hide DDI selector
-      if (ddiWrap) { ddiWrap.remove(); }
-      row.className = 'lp-unified-row';
     }
   };
 
-  function _buildDDISelect() {
-    var wrap = document.createElement('div');
-    wrap.id = 'lp-ddi-wrap';
-    var sel = document.createElement('select');
-    sel.id = 'lp-ddi';
-    sel.className = 'lp-ddi-select';
-    var countries = [
-      { label: '🇧🇷 +55', value: '+55' },
-      { label: '🇺🇸 +1',  value: '+1'  },
-      { label: '🇵🇹 +351', value: '+351'},
-      { label: '🇦🇷 +54', value: '+54' },
-      { label: '🇲🇽 +52', value: '+52' },
-      { label: '🇪🇸 +34', value: '+34' }
-    ];
-    countries.forEach(function (c) {
-      var opt = document.createElement('option');
-      opt.value = c.value;
-      opt.textContent = c.label;
-      sel.appendChild(opt);
-    });
-    wrap.appendChild(sel);
-    return wrap;
-  }
-
-  // ── Send unified (email → magic link, phone → SMS) ───────────────────────────
+  // ── Enviar (unified) ──────────────────────────────────────────────────────────
 
   window._lpSendUnified = async function () {
-    var input = document.getElementById('lp-unified-input');
-    if (!input) return;
-    var val = (input.value || '').trim();
-    if (!val) {
-      window.showNotification('Atenção', 'Informe seu e-mail ou celular', 'warning');
+    var unifiedEl = document.getElementById('lp-unified');
+    var raw = unifiedEl ? unifiedEl.value.trim() : '';
+    if (!raw) {
+      window.showNotification('Atenção', 'Digite e-mail ou celular pra continuar.', 'warning');
+      if (unifiedEl) unifiedEl.focus();
       return;
     }
-
-    var btn = document.getElementById('lp-unified-btn');
-    if (btn) btn.disabled = true;
-
-    var digits = val.replace(/\D/g, '');
-    var isPhone = digits.length >= 8 && !val.includes('@');
-
-    if (isPhone) {
-      // Phone / SMS flow
-      var ddiSel = document.getElementById('lp-ddi');
-      var ddi    = ddiSel ? ddiSel.value : '+55';
-      var phone  = ddi + digits;
-      _lpSentPhone = phone;
-      window.showLoading('Enviando SMS…');
-      try {
-        await window.sendPhoneSMS(phone);
-        window.hideLoading();
-        _lpShowStep('sms-code');
-        var sub = document.getElementById('lp-sms-sub');
-        if (sub) sub.textContent = 'Digite o código de 6 dígitos enviado para ' + phone + '.';
-      } catch (_err) {
-        window.hideLoading();
-        if (btn) btn.disabled = false;
-      }
+    var mode = _detectInputModeRaw(raw);
+    if (mode === 'email') {
+      var emlHidden = document.getElementById('lp-email-ml');
+      if (emlHidden) emlHidden.value = raw;
+      await _lpHandleEmailLink(raw);
+    } else if (mode === 'phone') {
+      var phoneHidden    = document.getElementById('lp-phone-num');
+      var countryVisible = document.getElementById('lp-unified-country');
+      var countryHidden  = document.getElementById('lp-phone-country');
+      if (phoneHidden) phoneHidden.value = raw;
+      if (countryVisible && countryHidden) countryHidden.value = countryVisible.value;
+      await _lpHandlePhoneSMS();
     } else {
-      // Email / magic link flow
-      _lpSentEmail = val;
-      window.showLoading('Enviando link…');
-      try {
-        await window.sendMagicLink(val);
-        window.hideLoading();
-        _lpShowStep('email-sent');
-        var sub2 = document.getElementById('lp-email-sent-sub');
-        if (sub2) sub2.textContent = 'Verifique o e-mail ' + val + ' e clique no link para entrar. Cheque também a pasta de spam.';
-      } catch (_err) {
-        window.hideLoading();
-        if (btn) btn.disabled = false;
-      }
+      window.showNotification('Formato não reconhecido', 'Digite um e-mail (com @) ou celular com DDD (ex: 11 99999-8888).', 'warning');
+      if (unifiedEl) unifiedEl.focus();
     }
   };
 
-  // ── Verify SMS code ───────────────────────────────────────────────────────────
+  // ── Magic link ────────────────────────────────────────────────────────────────
+
+  async function _lpHandleEmailLink(email) {
+    window.showLoading('Enviando link…');
+    try {
+      await window.sendMagicLink(email);
+      window.hideLoading();
+      // Substitui o corpo do card pelo painel de confirmação (igual scoreplace.app)
+      var body = document.getElementById('lp-body');
+      if (body) {
+        var safe = email.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        body.innerHTML =
+          '<div style="text-align:center;padding:1rem 0;">' +
+            '<div style="font-size:3rem;margin-bottom:0.5rem;">📬</div>' +
+            '<div style="font-size:1.05rem;font-weight:800;color:var(--text-primary);margin-bottom:0.5rem;">Link enviado!</div>' +
+            '<p style="font-size:0.88rem;color:var(--text-secondary);margin:0 0 1rem 0;">' +
+              'Enviamos um link de acesso pra <b>' + safe + '</b>. Clique no link do e-mail pra entrar.' +
+            '</p>' +
+            '<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:10px 12px;margin-bottom:0.75rem;text-align:left;">' +
+              '<div style="font-size:0.8rem;font-weight:700;color:#fbbf24;margin-bottom:4px;">⚠️ Não chegou? Cheque o spam.</div>' +
+              '<div style="font-size:0.76rem;color:var(--text-muted);line-height:1.45;">' +
+                'Primeira vez geralmente cai lá. Adicione o remetente aos contatos pra próximas vezes não cair no spam.' +
+              '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' +
+              '<button style="background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 14px;font-size:0.82rem;cursor:pointer;"' +
+                ' onclick="window.location.hash=\'#login\'">' +
+                'Voltar' +
+              '</button>' +
+              '<button id="lp-resend-btn"' +
+                ' style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:7px 14px;font-size:0.82rem;font-weight:700;cursor:pointer;"' +
+                ' onclick="window._lpResendMagicLink()">' +
+                'Reenviar' +
+              '</button>' +
+            '</div>' +
+          '</div>';
+        window._lpResendEmail = email;
+      }
+    } catch (_e) {
+      window.hideLoading();
+    }
+  }
+
+  window._lpResendMagicLink = async function () {
+    var btn = document.getElementById('lp-resend-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+    try {
+      await window.sendMagicLink(window._lpResendEmail || '');
+      if (btn) { btn.disabled = false; btn.textContent = 'Enviado ✓'; }
+    } catch (_e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Reenviar'; }
+    }
+  };
+
+  // ── SMS ───────────────────────────────────────────────────────────────────────
+
+  async function _lpHandlePhoneSMS() {
+    var digits  = (document.getElementById('lp-phone-num') || {}).value || '';
+    var ddi     = (document.getElementById('lp-phone-country') || {}).value || '55';
+    var phone   = '+' + ddi + digits.replace(/\D/g, '');
+    window._lpLastPhone = phone;
+    window.showLoading('Enviando SMS…');
+    try {
+      await window.sendPhoneSMS(phone);
+      window.hideLoading();
+      // Esconde unified step, mostra code step
+      var unified = document.getElementById('lp-unified-step');
+      var codeStep = document.getElementById('lp-sms-code-step');
+      if (unified)  unified.style.display  = 'none';
+      if (codeStep) codeStep.style.display = 'block';
+      setTimeout(function () {
+        var c = document.getElementById('lp-sms-code');
+        if (c) c.focus();
+      }, 80);
+    } catch (_e) {
+      window.hideLoading();
+    }
+  }
 
   window._lpVerifyCode = async function () {
     var codeEl = document.getElementById('lp-sms-code');
-    var code   = codeEl ? (codeEl.value || '').trim() : '';
+    var code = codeEl ? codeEl.value.trim() : '';
     if (code.length < 6) {
       window.showNotification('Atenção', 'Digite o código de 6 dígitos', 'warning');
       return;
@@ -360,124 +365,88 @@
     window.showLoading('Verificando…');
     try {
       await window.confirmPhoneCode(code);
-      // onAuthStateChanged in main.js will redirect to dashboard
-    } catch (_err) {
-      // error notification handled inside confirmPhoneCode
-    }
-  };
-
-  // ── Resend helpers ────────────────────────────────────────────────────────────
-
-  window._lpResendMagicLink = async function () {
-    if (!_lpSentEmail) { window._lpBackToUnified(); return; }
-    window.showLoading('Reenviando…');
-    try {
-      await window.sendMagicLink(_lpSentEmail);
-      window.hideLoading();
     } catch (_e) {
-      window.hideLoading();
+      // notification handled inside confirmPhoneCode
     }
   };
 
   window._lpResendSMS = async function () {
-    if (!_lpSentPhone) { window._lpBackToUnified(); return; }
+    var phone = window._lpLastPhone || '';
+    if (!phone) { window._lpResetUnified(); return; }
     window.showLoading('Reenviando SMS…');
     try {
-      await window.sendPhoneSMS(_lpSentPhone);
+      await window.sendPhoneSMS(phone);
       window.hideLoading();
-      var codeEl = document.getElementById('lp-sms-code');
-      if (codeEl) codeEl.value = '';
+      var c = document.getElementById('lp-sms-code');
+      if (c) c.value = '';
       window.showNotification('SMS reenviado', 'Aguarde o código chegar.', 'success');
     } catch (_e) {
       window.hideLoading();
     }
   };
 
-  // ── Step visibility ───────────────────────────────────────────────────────────
-
-  function _lpShowStep(step) {
-    _lpStep = step;
-    var unified   = document.getElementById('lp-unified-section');
-    var emailSent = document.getElementById('lp-email-sent-panel');
-    var smsPanel  = document.getElementById('lp-sms-panel');
-
-    if (unified)   unified.hidden   = (step !== 'unified');
-    if (emailSent) emailSent.hidden = (step !== 'email-sent');
-    if (smsPanel)  smsPanel.hidden  = (step !== 'sms-code');
-
-    if (step === 'sms-code') {
-      setTimeout(function () {
-        var c = document.getElementById('lp-sms-code');
-        if (c) c.focus();
-      }, 80);
-    }
-  }
-
-  window._lpBackToUnified = function () {
-    _lpSentEmail = '';
-    _lpSentPhone = '';
-    _lpShowStep('unified');
-    var btn = document.getElementById('lp-unified-btn');
-    if (btn) btn.disabled = false;
-    var input = document.getElementById('lp-unified-input');
-    if (input) { input.value = ''; input.focus(); }
+  window._lpResetUnified = function () {
+    window._lpLastPhone = '';
+    var unified  = document.getElementById('lp-unified-step');
+    var codeStep = document.getElementById('lp-sms-code-step');
+    if (unified)  unified.style.display  = 'block';
+    if (codeStep) codeStep.style.display = 'none';
+    window._phoneConfirmResult = null;
   };
 
-  // ── Mode switch (email/password tabs) ────────────────────────────────────────
+  // ── E-mail e Senha — toggle login / cadastro ──────────────────────────────────
 
-  window._lpSetMode = function (mode) {
-    _emailMode = mode;
+  window._lpToggleEmailMode = function (mode) {
+    var loginDiv    = document.getElementById('lp-email-login-mode');
+    var registerDiv = document.getElementById('lp-email-register-mode');
+    if (mode === 'register') {
+      if (loginDiv)    loginDiv.style.display    = 'none';
+      if (registerDiv) registerDiv.style.display = 'block';
+    } else {
+      if (loginDiv)    loginDiv.style.display    = 'block';
+      if (registerDiv) registerDiv.style.display = 'none';
+    }
+  };
 
-    ['signin', 'signup', 'reset'].forEach(function (m) {
-      var tab = document.getElementById('lp-tab-' + m);
-      if (tab) tab.classList.toggle('active', m === mode);
+  window._lpEmailLogin = function () {
+    var email = (document.getElementById('lp-email') || {}).value.trim();
+    var pwd   = (document.getElementById('lp-password') || {}).value;
+    if (!email || !pwd) {
+      window.showNotification('Atenção', 'Preencha e-mail e senha', 'warning');
+      return;
+    }
+    window.showLoading('Entrando…');
+    window.signInWithEmail(email, pwd).finally(window.hideLoading);
+  };
+
+  window._lpEmailRegister = function () {
+    var name = (document.getElementById('lp-name') || {}).value.trim();
+    var em   = (document.getElementById('lp-email-reg') || {}).value.trim();
+    var pw   = (document.getElementById('lp-password-reg') || {}).value;
+    if (!name || !em || !pw) {
+      window.showNotification('Atenção', 'Preencha todos os campos', 'warning');
+      return;
+    }
+    if (pw.length < 6) {
+      window.showNotification('Atenção', 'A senha precisa ter pelo menos 6 caracteres', 'warning');
+      return;
+    }
+    window.showLoading('Criando conta…');
+    window.signUpWithEmail(em, pw, name).finally(window.hideLoading);
+  };
+
+  window._lpPasswordReset = function () {
+    var email = (document.getElementById('lp-email') || {}).value.trim();
+    if (!email) {
+      window.showNotification('Atenção', 'Informe seu e-mail no campo acima primeiro', 'warning');
+      return;
+    }
+    window.sendPasswordReset(email).then(function () {
+      window.showNotification('E-mail enviado', 'Verifique sua caixa de entrada.', 'success');
     });
-
-    var slot = document.getElementById('lp-email-form');
-    if (slot) slot.innerHTML = _buildEmailForm();
   };
 
-  // ── Email/password submit ─────────────────────────────────────────────────────
-
-  window._lpSubmit = function () {
-    if (_emailMode === 'signin') {
-      var email = (document.getElementById('lp-email') || {}).value.trim();
-      var pwd   = (document.getElementById('lp-password') || {}).value;
-      if (!email || !pwd) {
-        window.showNotification('Atenção', 'Preencha e-mail e senha', 'warning');
-        return;
-      }
-      window.showLoading('Entrando…');
-      window.signInWithEmail(email, pwd).finally(window.hideLoading);
-
-    } else if (_emailMode === 'signup') {
-      var name = (document.getElementById('lp-name') || {}).value.trim();
-      var em   = (document.getElementById('lp-email') || {}).value.trim();
-      var pw   = (document.getElementById('lp-password') || {}).value;
-      if (!name || !em || !pw) {
-        window.showNotification('Atenção', 'Preencha todos os campos', 'warning');
-        return;
-      }
-      if (pw.length < 6) {
-        window.showNotification('Atenção', 'A senha precisa ter pelo menos 6 caracteres', 'warning');
-        return;
-      }
-      window.showLoading('Criando conta…');
-      window.signUpWithEmail(em, pw, name).finally(window.hideLoading);
-
-    } else if (_emailMode === 'reset') {
-      var re = (document.getElementById('lp-email') || {}).value.trim();
-      if (!re) {
-        window.showNotification('Atenção', 'Informe seu e-mail', 'warning');
-        return;
-      }
-      window.sendPasswordReset(re).then(function () {
-        window._lpSetMode('signin');
-      });
-    }
-  };
-
-  // ── Wire events ───────────────────────────────────────────────────────────────
+  // ── Wire ──────────────────────────────────────────────────────────────────────
 
   function _wire() {
     var googleBtn = document.getElementById('lp-google-btn');
@@ -486,10 +455,8 @@
         window.signInWithGoogle();
       });
     }
-
-    // Auto-focus unified input
     setTimeout(function () {
-      var inp = document.getElementById('lp-unified-input');
+      var inp = document.getElementById('lp-unified');
       if (inp) inp.focus();
     }, 80);
   }

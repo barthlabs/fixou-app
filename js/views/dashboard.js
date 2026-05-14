@@ -1,180 +1,380 @@
-// fixou.app — Dashboard
+// fixou.app — Dashboard (flat layout: Pendências + Organizações e Unidades)
 
 (function () {
   'use strict';
 
-  var statusFilter = 'all';
-  var unsubscribers = [];
+  // ── Module state ──────────────────────────────────────────────────────────────
+  var _unsubTickets     = null;   // Firestore onSnapshot unsub
+  var _membershipHandler = null;  // window event listener ref
+  var _allTickets = {};           // docId → ticket
+  var _units      = {};           // docId → unit
+  var _orgs       = {};           // orgId → membership obj
+  var _unitCounter = 1;
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-  function _safe(s) { return window._safeHtml(s || ''); }
-  function _attr(s) { return window._safeAttr(String(s || '')); }
-
-  var SPECIALTIES = [
-    { id: 'eletrica',        label: '⚡ Elétrica' },
-    { id: 'hidraulica',      label: '🚿 Hidráulica' },
-    { id: 'pintura',         label: '🎨 Pintura' },
-    { id: 'jardinagem',      label: '🌿 Jardinagem' },
-    { id: 'limpeza',         label: '🧹 Limpeza' },
-    { id: 'ar_condicionado', label: '❄️ Ar-condicionado' },
-    { id: 'serralheria',     label: '🔩 Serralheria' },
-    { id: 'marcenaria',      label: '🪚 Marcenaria' },
-    { id: 'pedreiro',        label: '🧱 Alvenaria' },
-    { id: 'tecnologia',      label: '💻 Tecnologia/TI' },
-    { id: 'outros',          label: '🛠️ Outros' }
-  ];
-
-  function specLabel(id) {
-    var s = SPECIALTIES.find(function (x) { return x.id === id; });
-    return s ? s.label : (id || '—');
+  // ── Helpers ───────────────────────────────────────────────────────────────────
+  function _safe(s) {
+    return window._safeHtml ? window._safeHtml(s || '') : String(s || '');
+  }
+  function _attr(s) {
+    return window._safeAttr
+      ? window._safeAttr(String(s || ''))
+      : String(s || '').replace(/"/g, '&quot;');
+  }
+  function _empty(icon, title, msg) {
+    if (window.emptyState) return window.emptyState(icon, title, msg);
+    return '<div style="text-align:center;padding:40px 16px;color:var(--text-muted);">' +
+      '<div style="font-size:2.2rem;margin-bottom:8px;">' + icon + '</div>' +
+      '<div style="font-weight:700;margin-bottom:4px;">' + title + '</div>' +
+      '<div style="font-size:0.88rem;">' + msg + '</div>' +
+    '</div>';
   }
 
   // ── Entry point ───────────────────────────────────────────────────────────────
   window.renderDashboard = function (container) {
     if (!window.AppStore.currentUser) return;
-    detachListeners();
-    if (!window.AppStore.currentOrgId) return renderHome(container);
-    renderOrgDashboard(container);
+    detach();
+    render(container);
   };
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // HOME SCREEN — 2 boxes: Organizações | Serviços
-  // ════════════════════════════════════════════════════════════════════════════
+  // ── Detach ────────────────────────────────────────────────────────────────────
+  function detach() {
+    if (_unsubTickets) {
+      try { _unsubTickets(); } catch (e) {}
+      _unsubTickets = null;
+    }
+    if (_membershipHandler) {
+      window.removeEventListener('memberships-changed', _membershipHandler);
+      _membershipHandler = null;
+    }
+    _allTickets = {};
+    _units = {};
+    _orgs = {};
+  }
 
-  function renderHome(container) {
+  // ── Main render ───────────────────────────────────────────────────────────────
+  function render(container) {
     var u = window.AppStore.currentUser || {};
     var firstName = (u.displayName || '').split(' ')[0] || 'usuário';
     var memberships = window.AppStore.memberships || [];
     var adminOrgs = memberships.filter(function (m) { return m.role === 'admin'; });
-    var services = ((window.AppStore.providerProfile || {}).services) || [];
+
+    // Build lookup
+    _orgs = {};
+    adminOrgs.forEach(function (m) { _orgs[m.orgId] = m; });
 
     container.innerHTML =
       '<h1 class="page-title">Olá, ' + _safe(firstName) + '! 👋</h1>' +
 
-      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;align-items:start;">' +
-
-        // ── Organizações ──────────────────────────────────────────────────────
-        '<div class="card">' +
-          '<div class="flex items-center justify-between mb-3">' +
-            '<h2 class="section-title" style="margin:0;">🏢 Organizações</h2>' +
-            '<button class="btn btn-primary btn-sm" id="home-new-org">+ Nova organização</button>' +
-          '</div>' +
+      // ── Pendências ────────────────────────────────────────────────────────────
+      '<div class="dash-section">' +
+        '<div class="dash-section-header">' +
+          '<h2 class="dash-section-title">📋 Pendências</h2>' +
+          '<button class="btn btn-primary btn-sm" id="btn-new-ticket">+ Nova pendência</button>' +
+        '</div>' +
+        '<div id="dash-tickets">' +
           (adminOrgs.length === 0
-            ? '<p class="text-muted text-small">Nenhuma organização ainda.<br>Crie a primeira para começar.</p>'
-            : '<div id="home-orgs-list">' + adminOrgs.map(renderOrgItem).join('') + '</div>'
-          ) +
+            ? _empty('📋', 'Nenhuma pendência', 'Crie uma organização para começar a gerenciar chamados.')
+            : '<div class="text-small text-muted" style="padding:8px 0;">Carregando…</div>') +
         '</div>' +
-
-        // ── Serviços ──────────────────────────────────────────────────────────
-        '<div class="card">' +
-          '<div class="flex items-center justify-between mb-3">' +
-            '<h2 class="section-title" style="margin:0;">🛠️ Serviços</h2>' +
-            '<button class="btn btn-primary btn-sm" id="home-new-service">+ Novo serviço</button>' +
-          '</div>' +
-          (services.length === 0
-            ? '<p class="text-muted text-small">Nenhum serviço cadastrado.<br>Adicione os serviços que você presta.</p>'
-            : services.map(function (s) { return renderServiceItem(s, memberships); }).join('')
-          ) +
-        '</div>' +
-
       '</div>' +
 
-      '<div id="home-modal-slot"></div>';
+      // ── Organizações e Unidades ───────────────────────────────────────────────
+      '<div class="dash-section">' +
+        '<div class="dash-section-header">' +
+          '<h2 class="dash-section-title">🏢 Organizações e Unidades</h2>' +
+          '<button class="btn btn-ghost btn-sm" id="btn-new-org">+ Nova organização</button>' +
+        '</div>' +
+        '<div id="dash-orgs">' +
+          (adminOrgs.length === 0
+            ? _empty('🏢', 'Nenhuma organização', 'Crie sua primeira organização para começar.')
+            : adminOrgs.map(renderOrgBlock).join('')) +
+        '</div>' +
+      '</div>' +
 
-    // Wire
-    var btnNewOrg = document.getElementById('home-new-org');
-    if (btnNewOrg) btnNewOrg.addEventListener('click', openNewOrgModal);
+      '<div id="dash-modal-slot"></div>';
 
-    var btnNewSvc = document.getElementById('home-new-service');
-    if (btnNewSvc) btnNewSvc.addEventListener('click', openNewServiceModal);
+    // ── Wire buttons ─────────────────────────────────────────────────────────────
+    var newTicketBtn = document.getElementById('btn-new-ticket');
+    if (newTicketBtn) newTicketBtn.addEventListener('click', handleNewTicket);
 
-    container.querySelectorAll('[data-enter-org]').forEach(function (el) {
-      el.addEventListener('click', function () { window._dashEnterOrg(el.dataset.enterOrg); });
-    });
+    var newOrgBtn = document.getElementById('btn-new-org');
+    if (newOrgBtn) newOrgBtn.addEventListener('click', openNewOrgModal);
 
-    // Async: load units for each org
-    loadAllUnits(adminOrgs);
+    // Ticket click via event delegation
+    var ticketsEl = document.getElementById('dash-tickets');
+    if (ticketsEl) {
+      ticketsEl.addEventListener('click', function (e) {
+        var card = e.target.closest('[data-ticket-id]');
+        if (!card) return;
+        var tId = card.dataset.ticketId;
+        var orgId = card.dataset.orgId;
+        if (tId && orgId) {
+          window.AppStore.setCurrentOrg(orgId);
+          setTimeout(function () { window.location.hash = '#ticket/' + tId; }, 150);
+        }
+      });
+    }
+
+    // Wire "+ Nova unidade" buttons
+    wireAddUnitButtons();
+
+    // Load units then start ticket listener
+    if (adminOrgs.length > 0) {
+      loadUnitsForOrgs(adminOrgs, function () {
+        fillUnitLists();
+        startTicketListener(adminOrgs);
+      });
+    }
+
+    // Listen for membership changes (org name backfill, new org created)
+    _membershipHandler = function () {
+      var updated = window.AppStore.memberships || [];
+      var updatedAdminOrgs = updated.filter(function (m) { return m.role === 'admin'; });
+
+      _orgs = {};
+      updatedAdminOrgs.forEach(function (m) { _orgs[m.orgId] = m; });
+
+      var orgsEl = document.getElementById('dash-orgs');
+      if (orgsEl) {
+        orgsEl.innerHTML = updatedAdminOrgs.length === 0
+          ? _empty('🏢', 'Nenhuma organização', 'Crie sua primeira organização para começar.')
+          : updatedAdminOrgs.map(renderOrgBlock).join('');
+        wireAddUnitButtons();
+      }
+
+      if (updatedAdminOrgs.length > 0) {
+        // Clear and reload units to pick up new orgs
+        _units = {};
+        loadUnitsForOrgs(updatedAdminOrgs, function () {
+          fillUnitLists();
+          startTicketListener(updatedAdminOrgs);
+        });
+      } else {
+        renderTicketsList();
+      }
+    };
+    window.addEventListener('memberships-changed', _membershipHandler);
   }
 
-  // ── Org item (with async unit list) ──────────────────────────────────────────
-  function renderOrgItem(m) {
+  // ── Org block ─────────────────────────────────────────────────────────────────
+  function renderOrgBlock(m) {
     var name = m.orgName || m._resolvedName || ('Org ' + m.orgId.substring(0, 8));
     return '' +
-      '<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);" ' +
-           'data-org-item="' + _attr(m.orgId) + '">' +
-        '<button data-enter-org="' + _attr(m.orgId) + '" ' +
-          'style="width:100%;text-align:left;background:none;border:none;cursor:pointer;' +
-                 'display:flex;align-items:center;gap:8px;padding:0;">' +
-          '<span style="font-size:1.1rem;">🏢</span>' +
-          '<span style="font-weight:700;flex:1;" class="org-name-lbl">' + _safe(name) + '</span>' +
-          '<span class="text-muted" style="font-size:0.85rem;">›</span>' +
-        '</button>' +
-        '<div id="units-of-' + _attr(m.orgId) + '" ' +
-             'style="margin-top:6px;padding-left:26px;" ' +
-             'class="text-small text-muted">…</div>' +
+      '<div class="dash-org-block" data-org-block="' + _attr(m.orgId) + '">' +
+        '<div class="dash-org-header">' +
+          '<div style="font-weight:700;font-size:1rem;display:flex;align-items:center;gap:8px;">' +
+            '<span>🏢</span>' +
+            '<span class="org-name-lbl">' + _safe(name) + '</span>' +
+          '</div>' +
+          '<button class="btn btn-ghost btn-sm" data-add-unit="' + _attr(m.orgId) + '">' +
+            '+ Nova unidade' +
+          '</button>' +
+        '</div>' +
+        '<div class="dash-units-list" id="units-list-' + _attr(m.orgId) + '">' +
+          '<div class="text-small text-muted" style="padding:4px 0;">Carregando…</div>' +
+        '</div>' +
       '</div>';
   }
 
-  function loadAllUnits(adminOrgs) {
+  function wireAddUnitButtons() {
+    document.querySelectorAll('[data-add-unit]').forEach(function (btn) {
+      // Clone to remove any previous listeners
+      var fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener('click', function () {
+        openAddUnitModal(fresh.dataset.addUnit);
+      });
+    });
+  }
+
+  // ── Unit loading ──────────────────────────────────────────────────────────────
+  function loadUnitsForOrgs(adminOrgs, cb) {
+    if (adminOrgs.length === 0) { if (cb) cb(); return; }
+    var remaining = adminOrgs.length;
+    function done() { remaining--; if (remaining === 0 && cb) cb(); }
     adminOrgs.forEach(function (m) {
       window.db.collection('units').where('orgId', '==', m.orgId).get()
         .then(function (qs) {
-          var el = document.getElementById('units-of-' + m.orgId);
-          if (!el) return;
-          if (qs.empty) {
-            el.textContent = 'Nenhuma unidade';
-            return;
-          }
-          el.innerHTML = qs.docs.map(function (d) {
-            return '<div>• ' + _safe((d.data() || {}).name || '—') + '</div>';
-          }).join('');
+          qs.docs.forEach(function (d) {
+            _units[d.id] = Object.assign({ id: d.id }, d.data());
+          });
+          done();
         })
-        .catch(function () {
-          var el = document.getElementById('units-of-' + m.orgId);
-          if (el) el.textContent = '';
-        });
+        .catch(function () { done(); });
     });
   }
 
-  // ── Service item ──────────────────────────────────────────────────────────────
-  function renderServiceItem(s, memberships) {
-    var linked = (memberships || []).filter(function (m) {
-      return (s.linkedOrgIds || []).indexOf(m.orgId) !== -1;
+  function fillUnitLists() {
+    Object.keys(_orgs).forEach(function (orgId) {
+      var el = document.getElementById('units-list-' + orgId);
+      if (!el) return;
+      var list = Object.values(_units).filter(function (u) { return u.orgId === orgId; });
+      if (list.length === 0) {
+        el.innerHTML = '<div class="text-small text-muted" style="padding:4px 0;">Nenhuma unidade cadastrada</div>';
+        return;
+      }
+      el.innerHTML = list.map(function (u) {
+        return '<div class="dash-unit-item">• ' + _safe(u.name || '—') + '</div>';
+      }).join('');
     });
-    var orgNames = linked.map(function (m) {
-      return m.orgName || ('Org ' + m.orgId.substring(0, 8));
-    }).join(', ');
+  }
+
+  // ── Ticket listener ───────────────────────────────────────────────────────────
+  function startTicketListener(adminOrgs) {
+    if (_unsubTickets) { try { _unsubTickets(); } catch (e) {} _unsubTickets = null; }
+    var orgIds = adminOrgs.map(function (m) { return m.orgId; }).slice(0, 30);
+    if (orgIds.length === 0) { renderTicketsList(); return; }
+
+    _allTickets = {};
+    _unsubTickets = window.db
+      .collection('tickets')
+      .where('orgId', 'in', orgIds)
+      .onSnapshot(
+        function (qs) {
+          _allTickets = {};
+          qs.docs.forEach(function (d) {
+            _allTickets[d.id] = Object.assign({ id: d.id }, d.data());
+          });
+          renderTicketsList();
+        },
+        function (err) { console.error('[dashboard] tickets listener:', err); }
+      );
+  }
+
+  function renderTicketsList() {
+    var el = document.getElementById('dash-tickets');
+    if (!el) return;
+
+    var pending = Object.values(_allTickets).filter(function (t) {
+      return t.status !== 'approved' && t.status !== 'rejected';
+    });
+
+    pending.sort(function (a, b) {
+      var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+      var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+      return tb - ta;
+    });
+
+    if (pending.length === 0) {
+      el.innerHTML = _empty('📭', 'Tudo em dia!', 'Nenhuma pendência no momento.');
+      return;
+    }
+
+    el.innerHTML = pending.map(function (t) {
+      var unit = _units[t.unitId] || {};
+      var org  = _orgs[t.orgId]  || {};
+      var orgName = org.orgName || org._resolvedName || '';
+      return ticketCard(t, unit.name, orgName);
+    }).join('');
+  }
+
+  function ticketCard(t, unitName, orgName) {
+    var prioBorder = {
+      high:   'var(--danger)',
+      medium: 'var(--warning)',
+      low:    'var(--success)'
+    };
+    var border = prioBorder[t.priority] || 'var(--border-strong)';
     return '' +
-      '<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">' +
-        '<div style="font-weight:700;">' + _safe(specLabel(s.specialty)) + '</div>' +
-        (s.description ? '<div class="text-small text-muted">' + _safe(s.description) + '</div>' : '') +
-        '<div class="text-small" style="margin-top:4px;color:var(--text-muted);">' +
-          (orgNames || 'Sem vínculo com organização') +
+      '<div class="card dash-ticket-card" ' +
+           'data-ticket-id="' + _attr(t.id) + '" ' +
+           'data-org-id="' + _attr(t.orgId) + '" ' +
+           'style="border-left:3px solid ' + border + ';">' +
+        '<div class="card-header">' +
+          '<div class="card-title">' + _safe(t.title || 'Sem título') + '</div>' +
+          statusBadge(t.status) +
         '</div>' +
+        '<div class="text-small text-muted">' +
+          (orgName ? _safe(orgName) + ' › ' : '') +
+          _safe(unitName || '—') +
+          ' · ' + priorityLabel(t.priority) +
+          ' · ' + window.formatTime(t.createdAt) +
+        '</div>' +
+        (t.description
+          ? '<div class="text-small mt-2" style="color:var(--text-secondary);">' +
+              _safe(t.description.substring(0, 120)) + (t.description.length > 120 ? '…' : '') +
+            '</div>'
+          : '') +
       '</div>';
   }
 
-  // ── Enter org ─────────────────────────────────────────────────────────────────
-  window._dashEnterOrg = function (orgId) {
-    window.AppStore.setCurrentOrg(orgId);
-    setTimeout(function () { window.routerRender(); }, 200);
-  };
+  // ── "Nova pendência" flow ─────────────────────────────────────────────────────
+  function handleNewTicket() {
+    var memberships = window.AppStore.memberships || [];
+    var adminOrgs = memberships.filter(function (m) { return m.role === 'admin'; });
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // MODAL — Nova organização
-  // ════════════════════════════════════════════════════════════════════════════
+    if (adminOrgs.length === 0) {
+      window.showNotification('Atenção', 'Crie uma organização antes de abrir um chamado.', 'warning');
+      return;
+    }
 
-  var _unitCounter = 1;
+    if (adminOrgs.length === 1) {
+      var m = adminOrgs[0];
+      var hasUnits = Object.values(_units).some(function (u) { return u.orgId === m.orgId; });
+      if (!hasUnits) {
+        window.showNotification('Atenção', 'Adicione uma unidade à organização antes de criar chamados.', 'warning');
+        return;
+      }
+      window.AppStore.setCurrentOrg(m.orgId);
+      setTimeout(function () { window.location.hash = '#ticket/new'; }, 300);
+      return;
+    }
 
+    // Multiple orgs → picker
+    openOrgPickerModal(adminOrgs);
+  }
+
+  function openOrgPickerModal(adminOrgs) {
+    var slot = getModalSlot();
+    var options = adminOrgs.map(function (m) {
+      var name = m.orgName || m._resolvedName || ('Org ' + m.orgId.substring(0, 8));
+      return '<option value="' + _attr(m.orgId) + '">' + _safe(name) + '</option>';
+    }).join('');
+
+    slot.innerHTML = '' +
+      '<div class="modal-overlay active">' +
+        '<div class="modal">' +
+          '<div class="modal-header">' +
+            '<h2 class="modal-title">📋 Nova pendência</h2>' +
+            '<button class="modal-close" onclick="window._dashCloseModal()">×</button>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label class="form-label">Selecione a organização</label>' +
+            '<select id="picker-org-id">' + options + '</select>' +
+          '</div>' +
+          '<div class="flex gap-2" style="justify-content:flex-end;">' +
+            '<button class="btn btn-ghost" onclick="window._dashCloseModal()">Cancelar</button>' +
+            '<button class="btn btn-primary" id="picker-confirm">Continuar →</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var btn = document.getElementById('picker-confirm');
+    if (btn) btn.addEventListener('click', function () {
+      var sel = document.getElementById('picker-org-id');
+      var orgId = sel ? sel.value : null;
+      if (!orgId) return;
+      var hasUnits = Object.values(_units).some(function (u) { return u.orgId === orgId; });
+      if (!hasUnits) {
+        window.showNotification('Atenção', 'Adicione uma unidade a esta organização antes de criar chamados.', 'warning');
+        return;
+      }
+      window._dashCloseModal();
+      window.AppStore.setCurrentOrg(orgId);
+      setTimeout(function () { window.location.hash = '#ticket/new'; }, 300);
+    });
+  }
+
+  // ── Modal: Nova organização ───────────────────────────────────────────────────
   function openNewOrgModal() {
     _unitCounter = 1;
-    var slot = _getModalSlot();
+    var slot = getModalSlot();
     slot.innerHTML = '' +
       '<div class="modal-overlay active">' +
         '<div class="modal">' +
           '<div class="modal-header">' +
             '<h2 class="modal-title">🏢 Nova organização</h2>' +
-            '<button class="modal-close" onclick="window._homeCloseModal()">×</button>' +
+            '<button class="modal-close" onclick="window._dashCloseModal()">×</button>' +
           '</div>' +
           '<div class="form-group">' +
             '<label class="form-label">Nome da organização</label>' +
@@ -183,12 +383,12 @@
           '</div>' +
           '<div class="form-group">' +
             '<label class="form-label">Unidades</label>' +
-            '<div id="new-org-units">' + _unitRowHtml(0, true) + '</div>' +
+            '<div id="new-org-units">' + unitRowHtml(0, true) + '</div>' +
             '<button class="btn btn-ghost btn-sm" style="margin-top:8px;" ' +
-              'onclick="window._homeAddUnit()">+ Nova unidade</button>' +
+              'onclick="window._dashAddUnit()">+ Nova unidade</button>' +
           '</div>' +
           '<div class="flex gap-2" style="justify-content:flex-end;">' +
-            '<button class="btn btn-ghost" onclick="window._homeCloseModal()">Cancelar</button>' +
+            '<button class="btn btn-ghost" onclick="window._dashCloseModal()">Cancelar</button>' +
             '<button class="btn btn-primary" id="new-org-confirm">Criar</button>' +
           '</div>' +
         '</div>' +
@@ -202,31 +402,32 @@
     }, 80);
   }
 
-  function _unitRowHtml(i, isFirst) {
+  function unitRowHtml(i, isFirst) {
     return '' +
       '<div style="display:flex;gap:6px;margin-bottom:6px;" id="unit-row-' + i + '">' +
-        '<input type="text" id="unit-name-' + i + '" ' +
-          'placeholder="Nome da unidade" style="flex:1;">' +
+        '<input type="text" id="unit-name-' + i + '" placeholder="Nome da unidade" style="flex:1;">' +
         (!isFirst
           ? '<button class="btn btn-ghost btn-sm" ' +
-              'onclick="window._homeRemoveUnit(' + i + ')">✕</button>'
+              'onclick="window._dashRemoveUnit(' + i + ')">✕</button>'
           : '') +
       '</div>';
   }
 
-  window._homeAddUnit = function () {
+  window._dashAddUnit = function () {
     var list = document.getElementById('new-org-units');
     if (!list) return;
     var wrap = document.createElement('div');
-    wrap.innerHTML = _unitRowHtml(_unitCounter, false);
+    wrap.innerHTML = unitRowHtml(_unitCounter, false);
     list.appendChild(wrap.firstChild);
     _unitCounter++;
   };
+  window._homeAddUnit = window._dashAddUnit;   // compat alias
 
-  window._homeRemoveUnit = function (i) {
+  window._dashRemoveUnit = function (i) {
     var row = document.getElementById('unit-row-' + i);
     if (row) row.remove();
   };
+  window._homeRemoveUnit = window._dashRemoveUnit; // compat alias
 
   async function handleCreateOrg() {
     var nameEl = document.getElementById('new-org-name');
@@ -236,7 +437,6 @@
       return;
     }
 
-    // Collect all visible unit name inputs
     var unitNames = [];
     document.querySelectorAll('[id^="unit-name-"]').forEach(function (el) {
       var v = el.value.trim();
@@ -249,8 +449,10 @@
 
       if (unitNames.length > 0) {
         var batch = window.db.batch();
+        var newUnits = [];
         unitNames.forEach(function (uName) {
           var ref = window.db.collection('units').doc();
+          newUnits.push({ id: ref.id, orgId: orgId, name: uName });
           batch.set(ref, {
             orgId: orgId,
             name: uName,
@@ -258,15 +460,14 @@
           });
         });
         await batch.commit();
+        // Pre-cache so fillUnitLists works immediately on memberships-changed
+        newUnits.forEach(function (u) { _units[u.id] = u; });
       }
 
       window.hideLoading();
-      window._homeCloseModal();
-      window.showNotification('Pronto!', 'Organização criada.', 'success');
-      setTimeout(function () {
-        window.AppStore.setCurrentOrg(orgId);
-        window.routerRender();
-      }, 700);
+      window._dashCloseModal();
+      window.showNotification('Pronto!', 'Organização "' + name + '" criada.', 'success');
+      // memberships-changed event will refresh the UI automatically
     } catch (err) {
       window.hideLoading();
       console.error('[dashboard] createOrg error:', err);
@@ -274,319 +475,97 @@
     }
   }
 
-  // Compat alias (used by old org-switcher reference in main.js)
-  window._dashOpenCreateOrg = openNewOrgModal;
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // MODAL — Novo serviço
-  // ════════════════════════════════════════════════════════════════════════════
-
-  var _selectedSpecialty = null;
-
-  function openNewServiceModal() {
-    _selectedSpecialty = null;
-    var adminOrgs = (window.AppStore.memberships || []).filter(function (m) { return m.role === 'admin'; });
-    var slot = _getModalSlot();
-
-    var pillsHtml = SPECIALTIES.map(function (s) {
-      return '<button class="badge" data-spec="' + _attr(s.id) + '" ' +
-        'style="cursor:pointer;font-size:0.85rem;padding:7px 13px;' +
-               'background:rgba(255,255,255,0.06);color:var(--text-secondary);' +
-               'border:2px solid transparent;" ' +
-        'onclick="window._homeSelectSpec(\'' + _attr(s.id) + '\')">' +
-        s.label + '</button>';
-    }).join('');
-
-    var orgsHtml = adminOrgs.length === 0 ? '' :
-      '<div class="form-group">' +
-        '<div class="form-label">Vincular a organizações (opcional)</div>' +
-        adminOrgs.map(function (m) {
-          var name = m.orgName || ('Org ' + m.orgId.substring(0, 8));
-          return '<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;">' +
-            '<input type="checkbox" data-org-link="' + _attr(m.orgId) + '">' +
-            '<span class="text-small">' + _safe(name) + '</span>' +
-          '</label>';
-        }).join('') +
-      '</div>';
-
+  // ── Modal: Nova unidade (existing org) ───────────────────────────────────────
+  function openAddUnitModal(orgId) {
+    var org = _orgs[orgId];
+    var orgName = org ? (org.orgName || org._resolvedName || 'Organização') : 'Organização';
+    var slot = getModalSlot();
     slot.innerHTML = '' +
       '<div class="modal-overlay active">' +
         '<div class="modal">' +
           '<div class="modal-header">' +
-            '<h2 class="modal-title">🛠️ Novo serviço</h2>' +
-            '<button class="modal-close" onclick="window._homeCloseModal()">×</button>' +
+            '<h2 class="modal-title">Nova unidade</h2>' +
+            '<button class="modal-close" onclick="window._dashCloseModal()">×</button>' +
           '</div>' +
+          '<p class="text-small text-muted" style="margin-bottom:14px;">' +
+            'Organização: <strong>' + _safe(orgName) + '</strong>' +
+          '</p>' +
           '<div class="form-group">' +
-            '<div class="form-label">Tipo de serviço</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + pillsHtml + '</div>' +
+            '<label class="form-label">Nome da unidade</label>' +
+            '<input type="text" id="new-unit-name" ' +
+              'placeholder="Ex.: Loja 1, Bloco A, Apt 101">' +
           '</div>' +
-          '<div class="form-group">' +
-            '<label class="form-label" for="new-svc-desc">Descrição (opcional)</label>' +
-            '<textarea id="new-svc-desc" rows="2" ' +
-              'placeholder="Ex.: 10 anos de experiência, atendo emergências…"></textarea>' +
-          '</div>' +
-          orgsHtml +
           '<div class="flex gap-2" style="justify-content:flex-end;">' +
-            '<button class="btn btn-ghost" onclick="window._homeCloseModal()">Cancelar</button>' +
-            '<button class="btn btn-primary" id="new-svc-confirm">Salvar</button>' +
+            '<button class="btn btn-ghost" onclick="window._dashCloseModal()">Cancelar</button>' +
+            '<button class="btn btn-primary" id="add-unit-confirm">Adicionar</button>' +
           '</div>' +
         '</div>' +
       '</div>';
 
-    var btn = document.getElementById('new-svc-confirm');
-    if (btn) btn.addEventListener('click', handleCreateService);
+    var btn = document.getElementById('add-unit-confirm');
+    if (btn) btn.addEventListener('click', function () { handleAddUnit(orgId); });
+    setTimeout(function () {
+      var el = document.getElementById('new-unit-name');
+      if (el) el.focus();
+    }, 80);
   }
 
-  window._homeSelectSpec = function (id) {
-    _selectedSpecialty = id;
-    document.querySelectorAll('[data-spec]').forEach(function (el) {
-      var active = el.dataset.spec === id;
-      el.style.background = active ? 'rgba(30,64,175,0.4)' : 'rgba(255,255,255,0.06)';
-      el.style.color      = active ? 'white' : 'var(--text-secondary)';
-      el.style.border     = active ? '2px solid var(--primary)' : '2px solid transparent';
-    });
-  };
-
-  async function handleCreateService() {
-    if (!_selectedSpecialty) {
-      window.showNotification('Atenção', 'Selecione o tipo de serviço.', 'warning');
+  async function handleAddUnit(orgId) {
+    var nameEl = document.getElementById('new-unit-name');
+    var name = (nameEl ? nameEl.value : '').trim();
+    if (!name) {
+      window.showNotification('Atenção', 'Informe o nome da unidade.', 'warning');
       return;
     }
-    var u = window.AppStore.currentUser;
-    if (!u) return;
 
-    var desc = ((document.getElementById('new-svc-desc') || {}).value || '').trim();
-    var linkedOrgIds = [];
-    document.querySelectorAll('[data-org-link]').forEach(function (cb) {
-      if (cb.checked) linkedOrgIds.push(cb.dataset.orgLink);
-    });
-
-    var existing = ((window.AppStore.providerProfile || {}).services) || [];
-    var services = existing.concat([{
-      id: 'svc_' + Date.now(),
-      specialty: _selectedSpecialty,
-      description: desc,
-      linkedOrgIds: linkedOrgIds,
-      createdAt: new Date().toISOString()
-    }]);
-
-    window.showLoading('Salvando…');
+    window.showLoading('Adicionando unidade…');
     try {
-      await window.AppStore.saveProviderProfile(u.uid, { services: services });
+      var ref = window.db.collection('units').doc();
+      await ref.set({
+        orgId: orgId,
+        name: name,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      _units[ref.id] = { id: ref.id, orgId: orgId, name: name };
       window.hideLoading();
-      window._homeCloseModal();
-      window.showNotification('Pronto!', 'Serviço cadastrado.', 'success');
-      setTimeout(function () { window.routerRender(); }, 500);
+      window._dashCloseModal();
+      window.showNotification('Pronto!', 'Unidade adicionada.', 'success');
+
+      // Refresh this org's unit list in place
+      var listEl = document.getElementById('units-list-' + orgId);
+      if (listEl) {
+        var orgUnits = Object.values(_units).filter(function (u) { return u.orgId === orgId; });
+        listEl.innerHTML = orgUnits.map(function (u) {
+          return '<div class="dash-unit-item">• ' + _safe(u.name || '—') + '</div>';
+        }).join('');
+      }
     } catch (err) {
       window.hideLoading();
-      console.error('[dashboard] createService error:', err);
-      window.showNotification('Erro', err.message || 'Não foi possível salvar.', 'error');
+      console.error('[dashboard] addUnit error:', err);
+      window.showNotification('Erro', err.message || 'Não foi possível adicionar.', 'error');
     }
   }
 
-  // ── Modal slot ────────────────────────────────────────────────────────────────
-  function _getModalSlot() {
-    var slot = document.getElementById('home-modal-slot');
+  // ── Modal helpers ─────────────────────────────────────────────────────────────
+  function getModalSlot() {
+    var slot = document.getElementById('dash-modal-slot');
     if (!slot) {
       slot = document.createElement('div');
-      slot.id = 'home-modal-slot';
+      slot.id = 'dash-modal-slot';
       document.body.appendChild(slot);
     }
     return slot;
   }
 
-  window._homeCloseModal = function () {
-    var slot = document.getElementById('home-modal-slot');
+  window._dashCloseModal = function () {
+    var slot = document.getElementById('dash-modal-slot');
     if (slot) slot.innerHTML = '';
+    var homeSlot = document.getElementById('home-modal-slot');
+    if (homeSlot) homeSlot.innerHTML = '';
   };
+  window._homeCloseModal = window._dashCloseModal;   // compat alias
 
-  // ════════════════════════════════════════════════════════════════════════════
-  // ORG DASHBOARD — entered org
-  // ════════════════════════════════════════════════════════════════════════════
-
-  function renderOrgDashboard(container) {
-    var role = window.AppStore.currentOrgRole;
-    var u = window.AppStore.currentUser || {};
-    var firstName = (u.displayName || '').split(' ')[0] || 'usuário';
-    var memberships = window.AppStore.memberships || [];
-    var adminOrgs = memberships.filter(function (m) { return m.role === 'admin'; });
-
-    var currentIdx = -1;
-    adminOrgs.forEach(function (m, i) {
-      if (m.orgId === window.AppStore.currentOrgId) currentIdx = i;
-    });
-
-    var orgName = (window.AppStore.currentOrg || {}).name ||
-      (adminOrgs[currentIdx] && (adminOrgs[currentIdx].orgName || adminOrgs[currentIdx]._resolvedName)) ||
-      '—';
-    var hasPrev = currentIdx > 0;
-    var hasNext = currentIdx !== -1 && currentIdx < adminOrgs.length - 1;
-
-    container.innerHTML =
-      // ← Início
-      '<div class="mb-3">' +
-        '<button class="btn btn-ghost btn-sm" id="btn-back-home">← Início</button>' +
-      '</div>' +
-
-      // Greeting + org navigator
-      '<div class="flex items-center justify-between mb-2" style="flex-wrap:wrap;gap:12px;">' +
-        '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex:1;min-width:0;">' +
-          '<h1 class="page-title" style="margin:0;">Olá, ' + _safe(firstName) + '! 👋</h1>' +
-          '<div style="display:flex;align-items:center;gap:4px;">' +
-            '<button id="btn-prev-org" class="btn btn-ghost btn-sm" ' +
-              'style="padding:4px 10px;font-size:1.1rem;' + (!hasPrev ? 'opacity:0.25;cursor:default;' : '') + '"' +
-              (!hasPrev ? ' disabled' : '') + '>‹</button>' +
-            '<span style="font-weight:700;font-size:0.95rem;max-width:220px;' +
-                         'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" ' +
-                  'title="' + _attr(orgName) + '">' + _safe(orgName) + '</span>' +
-            '<button id="btn-next-org" class="btn btn-ghost btn-sm" ' +
-              'style="padding:4px 10px;font-size:1.1rem;' + (!hasNext ? 'opacity:0.25;cursor:default;' : '') + '"' +
-              (!hasNext ? ' disabled' : '') + '>›</button>' +
-          '</div>' +
-        '</div>' +
-        (canCreateTicket(role) ? '<button class="btn btn-primary" id="btn-new-ticket">+ Novo chamado</button>' : '') +
-      '</div>' +
-      '<div class="text-muted text-small mb-4">' + roleLabel(role) + '</div>' +
-
-      renderStats() +
-
-      '<div class="flex items-center justify-between mb-2 mt-4" style="gap:12px;flex-wrap:wrap;">' +
-        '<h2 class="section-title" style="margin:0;">Chamados</h2>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + renderFilters() + '</div>' +
-      '</div>' +
-
-      '<div id="tickets-list">' + renderTickets() + '</div>' +
-
-      (role === 'admin'
-        ? '<div class="mt-4 flex gap-2">' +
-            '<a class="btn btn-secondary" href="#admin">⚙️ Administrar organização</a>' +
-          '</div>'
-        : '');
-
-    // Wire
-    var backBtn = document.getElementById('btn-back-home');
-    if (backBtn) backBtn.addEventListener('click', function () {
-      window.AppStore.setCurrentOrg(null);
-      window.routerRender();
-    });
-
-    var prevBtn = document.getElementById('btn-prev-org');
-    if (prevBtn && hasPrev) prevBtn.addEventListener('click', function () {
-      window._dashEnterOrg(adminOrgs[currentIdx - 1].orgId);
-    });
-
-    var nextBtn = document.getElementById('btn-next-org');
-    if (nextBtn && hasNext) nextBtn.addEventListener('click', function () {
-      window._dashEnterOrg(adminOrgs[currentIdx + 1].orgId);
-    });
-
-    var newBtn = document.getElementById('btn-new-ticket');
-    if (newBtn) newBtn.addEventListener('click', function () { window.location.hash = '#ticket/new'; });
-
-    document.querySelectorAll('[data-filter]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        statusFilter = btn.dataset.filter;
-        var listEl = document.getElementById('tickets-list');
-        if (listEl) listEl.innerHTML = renderTickets();
-        document.querySelectorAll('[data-filter]').forEach(function (b) {
-          b.classList.toggle('btn-primary', b.dataset.filter === statusFilter);
-          b.classList.toggle('btn-ghost', b.dataset.filter !== statusFilter);
-        });
-      });
-    });
-
-    var rerender = function () {
-      var listEl = document.getElementById('tickets-list');
-      if (listEl) listEl.innerHTML = renderTickets();
-    };
-    window.addEventListener('tickets-changed', rerender);
-    unsubscribers.push(function () { window.removeEventListener('tickets-changed', rerender); });
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // TICKET HELPERS
-  // ════════════════════════════════════════════════════════════════════════════
-
-  function renderStats() {
-    var t = window.AppStore.tickets || [];
-    var open     = t.filter(function (x) { return x.status === 'open' || x.status === 'published'; }).length;
-    var inProg   = t.filter(function (x) { return x.status === 'assigned' || x.status === 'in_progress' || x.status === 'awaiting_confirmation'; }).length;
-    var awaiting = t.filter(function (x) { return x.status === 'awaiting_approval'; }).length;
-    var done     = t.filter(function (x) { return x.status === 'approved'; }).length;
-
-    return '' +
-      '<div class="grid grid-cols-auto">' +
-        '<div class="stat-box"><div class="stat-value">' + open + '</div><div class="stat-label">Abertos</div></div>' +
-        '<div class="stat-box"><div class="stat-value">' + inProg + '</div><div class="stat-label">Em andamento</div></div>' +
-        '<div class="stat-box"><div class="stat-value">' + awaiting + '</div><div class="stat-label">Aguardando aprovação</div></div>' +
-        '<div class="stat-box"><div class="stat-value">' + done + '</div><div class="stat-label">Concluídos</div></div>' +
-      '</div>';
-  }
-
-  function renderFilters() {
-    var filters = [
-      { id: 'all',              label: 'Todos' },
-      { id: 'open',             label: 'Abertos' },
-      { id: 'in_progress',      label: 'Em andamento' },
-      { id: 'awaiting_approval',label: 'Aprovação' },
-      { id: 'approved',         label: 'Concluídos' }
-    ];
-    return filters.map(function (f) {
-      var on = statusFilter === f.id;
-      return '<button class="btn btn-sm ' + (on ? 'btn-primary' : 'btn-ghost') + '" ' +
-        'data-filter="' + f.id + '">' + f.label + '</button>';
-    }).join('');
-  }
-
-  function renderTickets() {
-    var t = (window.AppStore.tickets || []).slice();
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'open') {
-        t = t.filter(function (x) { return x.status === 'open' || x.status === 'published'; });
-      } else if (statusFilter === 'in_progress') {
-        t = t.filter(function (x) { return x.status === 'assigned' || x.status === 'in_progress' || x.status === 'awaiting_confirmation'; });
-      } else {
-        t = t.filter(function (x) { return x.status === statusFilter; });
-      }
-    }
-
-    t.sort(function (a, b) {
-      var ta = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
-      var tb = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
-      return tb - ta;
-    });
-
-    if (t.length === 0) {
-      return window.emptyState('📭', 'Nenhum chamado', 'Quando houver chamados, eles aparecerão aqui.');
-    }
-
-    var units = window.AppStore.units || [];
-    return t.map(function (ticket) {
-      var unit = units.find(function (u) { return u.id === ticket.unitId; });
-      var unitName = unit ? unit.name : (ticket.unitId ? 'Unidade ' + ticket.unitId.substring(0, 6) : '—');
-      return ticketCard(ticket, unitName);
-    }).join('');
-  }
-
-  function ticketCard(t, unitName) {
-    return '' +
-      '<a class="card" href="#ticket/' + _attr(t.id) + '" ' +
-         'style="display:block;text-decoration:none;color:inherit;">' +
-        '<div class="card-header">' +
-          '<div class="card-title">' + _safe(t.title || 'Sem título') + '</div>' +
-          statusBadge(t.status) +
-        '</div>' +
-        '<div class="text-small text-muted">' +
-          _safe(unitName) + ' · ' + priorityLabel(t.priority) + ' · ' + window.formatTime(t.createdAt) +
-        '</div>' +
-        (t.description
-          ? '<div class="text-small mt-2" style="color:var(--text-secondary);">' +
-              _safe(t.description.substring(0, 140)) + (t.description.length > 140 ? '…' : '') +
-            '</div>'
-          : '') +
-      '</a>';
-  }
-
+  // ── Status / priority helpers ─────────────────────────────────────────────────
   function statusBadge(status) {
     var map = {
       open:                  { cls: 'badge-info',    text: 'Aberto' },
@@ -610,21 +589,8 @@
     return '—';
   }
 
-  function roleLabel(r) {
-    if (r === 'admin')    return '👔 Administrador';
-    if (r === 'manager')  return '🧑‍💼 Gestor';
-    if (r === 'provider') return '🛠️ Prestador';
-    return '';
-  }
-
-  function canCreateTicket(role) {
-    return role === 'admin' || role === 'manager';
-  }
-
-  function detachListeners() {
-    unsubscribers.forEach(function (fn) { try { fn(); } catch (e) {} });
-    unsubscribers = [];
-  }
+  // ── Compat aliases ────────────────────────────────────────────────────────────
+  window._dashOpenCreateOrg = openNewOrgModal;
 
   console.log('[fixou.app] dashboard.js loaded');
 })();

@@ -526,3 +526,42 @@ input::placeholder { color: var(--text-dim); }
   height: 1px;
   background: var(--border);
 }
+
+/* ── Dashboard flat layout ──────────────────────────────────────────────── */
+.dash-section { margin-bottom: 32px; }
+.dash-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dash-section-title { font-size: 1.2rem; font-weight: 700; margin: 0; }
+.dash-ticket-card {
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.dash-ticket-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong, var(--primary));
+}
+.dash-org-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.dash-org-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.dash-units-list { padding-left: 8px; }
+.dash-unit-item {
+  font-size: 0.88rem;
+  color: var(--text-secondary, var(--text-muted));
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dash-unit-item:last-child { border-bottom: none; }

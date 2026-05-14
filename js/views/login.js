@@ -1,261 +1,229 @@
 // fixou.app — Login / Landing page
+// Visual e fluxo inspirados no scoreplace.app
 
 (function () {
   'use strict';
 
-  var emailMode = 'signin'; // 'signin' | 'signup' | 'reset'
-  var _emailSectionVisible = false;
+  var _emailMode = 'signin'; // 'signin' | 'signup' | 'reset'
 
   window.renderLogin = function (container) {
-    _emailSectionVisible = false;
-    emailMode = 'signin';
-    container.innerHTML = buildLandingPage();
-    wire(container);
+    _emailMode = 'signin';
+    container.innerHTML = _buildPage();
+    _wire();
   };
 
-  // ── Landing page HTML ─────────────────────────────────────────────────────────
+  // ── Page shell ────────────────────────────────────────────────────────────────
 
-  function buildLandingPage() {
-    return '' +
+  function _buildPage() {
+    return (
       '<style>' +
-      '.lp-hero{background:linear-gradient(160deg,#0a0e1a 0%,#1e3a8a 55%,#2563eb 100%);' +
-              'padding:72px 24px 48px;text-align:center;margin:-24px -16px 0;}' +
-      '.lp-logo-icon{font-size:4rem;display:block;margin-bottom:14px;' +
-                    'filter:drop-shadow(0 4px 12px rgba(0,0,0,0.5));}' +
-      '.lp-title{font-size:2.6rem;font-weight:900;margin-bottom:10px;' +
-                'background:linear-gradient(90deg,#bfdbfe,#f0f9ff);' +
-                '-webkit-background-clip:text;-webkit-text-fill-color:transparent;' +
-                'background-clip:text;}' +
-      '.lp-subtitle{color:rgba(255,255,255,0.72);font-size:1.05rem;' +
-                   'max-width:440px;margin:0 auto 28px;line-height:1.6;}' +
-      '.lp-pills{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:36px;}' +
-      '.lp-pill{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);' +
-               'border-radius:999px;padding:6px 16px;font-size:0.82rem;color:rgba(255,255,255,0.9);}' +
-      '.lp-google-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;' +
-                     'background:white;color:#1f2937;border:none;border-radius:10px;' +
-                     'padding:14px 28px;font-size:1rem;font-weight:700;cursor:pointer;' +
-                     'transition:transform 0.15s,box-shadow 0.15s;width:100%;max-width:360px;' +
-                     'box-shadow:0 2px 12px rgba(0,0,0,0.45);}' +
-      '.lp-google-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.55);}' +
-      '.lp-email-toggle{display:block;margin:16px auto 0;color:rgba(255,255,255,0.5);' +
-                       'font-size:0.88rem;background:none;border:none;cursor:pointer;}' +
-      '.lp-email-toggle:hover{color:rgba(255,255,255,0.88);text-decoration:underline;}' +
-      '.lp-email-section{background:var(--bg-card);border-top:1px solid var(--border);' +
-                        'padding:32px 24px;margin:0 -16px;}' +
-      '.lp-email-inner{max-width:360px;margin:0 auto;}' +
-      '.lp-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));' +
-                   'gap:16px;padding:32px 16px;max-width:860px;margin:0 auto;}' +
-      '.lp-feat-card{background:var(--bg-card);border:1px solid var(--border);' +
-                    'border-radius:16px;padding:24px;}' +
-      '.lp-feat-icon{font-size:2rem;margin-bottom:10px;display:block;}' +
-      '.lp-feat-title{font-size:1rem;font-weight:700;margin-bottom:6px;}' +
-      '.lp-feat-desc{font-size:0.88rem;color:var(--text-muted);line-height:1.55;}' +
-      '.lp-footer{text-align:center;padding:16px 24px 32px;font-size:0.8rem;color:var(--text-dim);}' +
+      '.lp-wrap{min-height:calc(100vh - var(--topbar-h,0px));display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg-darkest);}' +
+      '.lp-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);width:100%;max-width:420px;overflow:hidden;}' +
+      '.lp-head{background:linear-gradient(160deg,#0a0e1a 0%,#1e3a8a 60%,#2563eb 100%);padding:32px 24px 24px;text-align:center;}' +
+      '.lp-logo{font-size:3rem;display:block;margin-bottom:10px;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5));}' +
+      '.lp-title{font-size:1.7rem;font-weight:900;background:linear-gradient(90deg,#bfdbfe,#f0f9ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px;}' +
+      '.lp-sub{color:rgba(255,255,255,0.65);font-size:0.85rem;}' +
+      '.lp-body{padding:24px;}' +
+      '.lp-section-label{font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}' +
+      '.lp-google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f2937;border:none;border-radius:var(--radius);padding:13px 20px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 2px 10px rgba(0,0,0,0.35);}' +
+      '.lp-google-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.45);}' +
+      '.lp-divider{display:flex;align-items:center;gap:12px;margin:18px 0;}' +
+      '.lp-divider::before,.lp-divider::after{content:"";flex:1;height:1px;background:var(--border);}' +
+      '.lp-divider span{color:var(--text-dim);font-size:0.7rem;}' +
+      '.lp-mode-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px;}' +
+      '.lp-tab{flex:1;padding:8px 4px;font-size:0.78rem;font-weight:600;border:none;background:transparent;color:var(--text-muted);cursor:pointer;transition:background .15s,color .15s;}' +
+      '.lp-tab.active{background:var(--primary);color:#fff;}' +
+      '.lp-tab:not(.active):hover{background:var(--bg-card-hover);color:var(--text-primary);}' +
+      '.lp-form-group{margin-bottom:10px;}' +
+      '.lp-label{font-size:0.75rem;color:var(--text-secondary);margin-bottom:4px;display:block;}' +
+      '.lp-input{width:100%;background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:10px 12px;font-size:0.88rem;color:var(--text-primary);outline:none;transition:border-color .15s;box-sizing:border-box;}' +
+      '.lp-input:focus{border-color:var(--primary-light);}' +
+      '.lp-btn-primary{width:100%;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);padding:12px;font-size:0.9rem;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;}' +
+      '.lp-btn-primary:hover{background:var(--primary-hover);transform:translateY(-1px);}' +
+      '.lp-links{display:flex;justify-content:center;gap:16px;margin-top:10px;font-size:0.75rem;}' +
+      '.lp-links a{color:var(--text-muted);cursor:pointer;text-decoration:none;}' +
+      '.lp-links a:hover{color:var(--primary-light);text-decoration:underline;}' +
+      '.lp-terms{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:0.68rem;color:var(--text-dim);text-align:center;line-height:1.5;}' +
+      '.lp-terms a{color:var(--text-muted);}' +
+      '.lp-terms a:hover{color:var(--primary-light);}' +
       '</style>' +
 
-      // ── Hero ──────────────────────────────────────────────────────────────────
-      '<div class="lp-hero">' +
-        '<span class="lp-logo-icon">🔧</span>' +
-        '<h1 class="lp-title">fixou.app</h1>' +
-        '<p class="lp-subtitle">Gestão de manutenção para lojas, condomínios, clubes e muito mais</p>' +
-        '<div class="lp-pills">' +
-          '<span class="lp-pill">📋 Chamados centralizados</span>' +
-          '<span class="lp-pill">🏢 Multi-organização</span>' +
-          '<span class="lp-pill">🛠️ Prestadores qualificados</span>' +
-        '</div>' +
-        '<button class="lp-google-btn" id="lp-google-btn">' +
-          '<svg width="20" height="20" viewBox="0 0 48 48" fill="none" ' +
-               'xmlns="http://www.w3.org/2000/svg">' +
-            '<path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 ' +
-                     '13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 ' +
-                     '24s9.4 21 21 21c10.5 0 20-7.5 20-21 0-1.4-.2-2.7-.5-4z" fill="#FFC107"/>' +
-            '<path d="M6.3 14.7l7 5.1C15.2 16.1 19.2 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4' +
-                     'C34.6 5.1 29.6 3 24 3c-7.7 0-14.3 4.7-17.7 11.7z" fill="#FF3D00"/>' +
-            '<path d="M24 45c5.5 0 10.5-2 14.3-5.4l-6.6-5.6C29.7 35.7 27 36.7 24 36.7c-6 0-10.6' +
-                     '-3.9-11.9-9.3l-7 5.4C8.1 40.4 15.5 45 24 45z" fill="#4CAF50"/>' +
-            '<path d="M44.5 20H24v8.5h11.8c-.7 2.2-2 4.1-3.9 5.4l6.6 5.6C42.4 36.1 45 30.5 45 ' +
-                     '24c0-1.4-.2-2.7-.5-4z" fill="#1976D2"/>' +
-          '</svg>' +
-          'Continuar com Google' +
-        '</button>' +
-        '<button class="lp-email-toggle" id="lp-email-toggle">Entrar com email</button>' +
-      '</div>' +
+      '<div class="lp-wrap">' +
+        '<div class="lp-card">' +
 
-      // ── Email section (hidden by default) ────────────────────────────────────
-      '<div class="lp-email-section" id="lp-email-section" style="display:none;">' +
-        '<div class="lp-email-inner">' +
-          '<div id="lp-email-form">' + buildEmailForm() + '</div>' +
-        '</div>' +
-      '</div>' +
+          // ── Header ──
+          '<div class="lp-head">' +
+            '<span class="lp-logo">🔧</span>' +
+            '<div class="lp-title">fixou.app</div>' +
+            '<div class="lp-sub">Gestão de manutenção simplificada</div>' +
+          '</div>' +
 
-      // ── Feature cards ─────────────────────────────────────────────────────────
-      '<div class="lp-features">' +
-        '<div class="lp-feat-card">' +
-          '<span class="lp-feat-icon">📋</span>' +
-          '<div class="lp-feat-title">Pendências centralizadas</div>' +
-          '<div class="lp-feat-desc">Todas as solicitações de manutenção em um único lugar, ' +
-            'organizadas por prioridade e status — do aberto ao aprovado.</div>' +
-        '</div>' +
-        '<div class="lp-feat-card">' +
-          '<span class="lp-feat-icon">🏢</span>' +
-          '<div class="lp-feat-title">Por organização e unidade</div>' +
-          '<div class="lp-feat-desc">Gerencie múltiplos imóveis, lojas ou unidades com controle ' +
-            'total sobre cada espaço, com histórico completo.</div>' +
-        '</div>' +
-        '<div class="lp-feat-card">' +
-          '<span class="lp-feat-icon">🛠️</span>' +
-          '<div class="lp-feat-title">Prestadores qualificados</div>' +
-          '<div class="lp-feat-desc">Conecte com prestadores de serviço e acompanhe cada etapa ' +
-            'da execução — da atribuição à confirmação de conclusão.</div>' +
-        '</div>' +
-      '</div>' +
+          // ── Body ──
+          '<div class="lp-body">' +
 
-      '<div class="lp-footer">© ' + new Date().getFullYear() + ' fixou.app · Todos os direitos reservados</div>';
+            // Google CTA
+            '<div class="lp-section-label">Entrar com</div>' +
+            '<button class="lp-google-btn" id="lp-google-btn">' +
+              '<svg width="18" height="18" viewBox="0 0 48 48">' +
+                '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>' +
+                '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>' +
+                '<path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.9 7.34 2.44 10.5l8.09-5.91z"/>' +
+                '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>' +
+              '</svg>' +
+              'Continuar com Google' +
+            '</button>' +
+
+            // Divider
+            '<div class="lp-divider"><span>ou</span></div>' +
+
+            // Mode tabs: Entrar / Criar conta / Recuperar
+            '<div class="lp-mode-tabs">' +
+              '<button class="lp-tab active" id="lp-tab-signin" onclick="window._lpSetMode(\'signin\')">Entrar</button>' +
+              '<button class="lp-tab" id="lp-tab-signup" onclick="window._lpSetMode(\'signup\')">Criar conta</button>' +
+              '<button class="lp-tab" id="lp-tab-reset" onclick="window._lpSetMode(\'reset\')">Recuperar senha</button>' +
+            '</div>' +
+
+            // Email form container
+            '<div id="lp-email-form">' + _buildEmailForm() + '</div>' +
+
+            // Terms
+            '<div class="lp-terms">' +
+              'Ao continuar, você concorda com os ' +
+              '<a href="#">Termos de Uso</a>' +
+              ' e a ' +
+              '<a href="#">Política de Privacidade</a>.' +
+            '</div>' +
+
+          '</div>' + // .lp-body
+        '</div>' + // .lp-card
+      '</div>' // .lp-wrap
+    );
   }
 
-  // ── Email form ────────────────────────────────────────────────────────────────
+  // ── Email form (by mode) ──────────────────────────────────────────────────────
 
-  function buildEmailForm() {
-    if (emailMode === 'signin') {
-      return '' +
-        '<h3 style="margin-bottom:16px;font-size:1.05rem;font-weight:700;">Entrar com email</h3>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="login-email">Email</label>' +
-          '<input type="email" id="login-email" autocomplete="email" placeholder="seu@email.com">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="login-password">Senha</label>' +
-          '<input type="password" id="login-password" autocomplete="current-password">' +
-        '</div>' +
-        '<button class="btn btn-primary btn-block" id="email-submit">Entrar</button>' +
-        '<div style="display:flex;justify-content:space-between;margin-top:10px;font-size:0.85rem;">' +
-          '<button class="btn-ghost" id="switch-signup" style="padding:4px;">Criar conta</button>' +
-          '<button class="btn-ghost" id="switch-reset" style="padding:4px;">Esqueci a senha</button>' +
-        '</div>';
+  function _buildEmailForm() {
+    if (_emailMode === 'signin') {
+      return (
+        '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
+          '<div class="lp-form-group">' +
+            '<label class="lp-label" for="lp-email">E-mail</label>' +
+            '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
+          '</div>' +
+          '<div class="lp-form-group">' +
+            '<label class="lp-label" for="lp-password">Senha</label>' +
+            '<input class="lp-input" type="password" id="lp-password" autocomplete="current-password" placeholder="••••••••" required>' +
+          '</div>' +
+          '<button class="lp-btn-primary" type="submit">Entrar</button>' +
+          '<div class="lp-links">' +
+            '<a onclick="window._lpSetMode(\'signup\')">Criar conta</a>' +
+            '<a onclick="window._lpSetMode(\'reset\')">Esqueci a senha</a>' +
+          '</div>' +
+        '</form>'
+      );
     }
-    if (emailMode === 'signup') {
-      return '' +
-        '<h3 style="margin-bottom:16px;font-size:1.05rem;font-weight:700;">Criar conta</h3>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="signup-name">Nome</label>' +
-          '<input type="text" id="signup-name" autocomplete="name" placeholder="Como prefere ser chamado">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="signup-email">Email</label>' +
-          '<input type="email" id="signup-email" autocomplete="email" placeholder="seu@email.com">' +
-        '</div>' +
-        '<div class="form-group">' +
-          '<label class="form-label" for="signup-password">Senha</label>' +
-          '<input type="password" id="signup-password" autocomplete="new-password" ' +
-            'placeholder="Mínimo 6 caracteres">' +
-        '</div>' +
-        '<button class="btn btn-primary btn-block" id="email-submit">Criar conta</button>' +
-        '<div style="display:flex;justify-content:center;margin-top:10px;font-size:0.85rem;">' +
-          '<button class="btn-ghost" id="switch-signin" style="padding:4px;">Já tenho conta</button>' +
-        '</div>';
+
+    if (_emailMode === 'signup') {
+      return (
+        '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
+          '<div class="lp-form-group">' +
+            '<label class="lp-label" for="lp-name">Nome</label>' +
+            '<input class="lp-input" type="text" id="lp-name" autocomplete="name" placeholder="Como prefere ser chamado" required>' +
+          '</div>' +
+          '<div class="lp-form-group">' +
+            '<label class="lp-label" for="lp-email">E-mail</label>' +
+            '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
+          '</div>' +
+          '<div class="lp-form-group">' +
+            '<label class="lp-label" for="lp-password">Senha</label>' +
+            '<input class="lp-input" type="password" id="lp-password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required minlength="6">' +
+          '</div>' +
+          '<button class="lp-btn-primary" type="submit">Criar conta</button>' +
+          '<div class="lp-links">' +
+            '<a onclick="window._lpSetMode(\'signin\')">Já tenho conta</a>' +
+          '</div>' +
+        '</form>'
+      );
     }
+
     // reset
-    return '' +
-      '<h3 style="margin-bottom:16px;font-size:1.05rem;font-weight:700;">Recuperar senha</h3>' +
-      '<div class="form-group">' +
-        '<label class="form-label" for="reset-email">Email</label>' +
-        '<input type="email" id="reset-email" autocomplete="email" placeholder="seu@email.com">' +
-      '</div>' +
-      '<button class="btn btn-primary btn-block" id="email-submit">Enviar link de recuperação</button>' +
-      '<div style="display:flex;justify-content:center;margin-top:10px;font-size:0.85rem;">' +
-        '<button class="btn-ghost" id="switch-signin" style="padding:4px;">Voltar ao login</button>' +
-      '</div>';
+    return (
+      '<form id="lp-form" novalidate onsubmit="event.preventDefault(); window._lpSubmit();">' +
+        '<div class="lp-form-group">' +
+          '<label class="lp-label" for="lp-email">E-mail</label>' +
+          '<input class="lp-input" type="email" id="lp-email" autocomplete="email" placeholder="seu@email.com" required>' +
+        '</div>' +
+        '<button class="lp-btn-primary" type="submit">Enviar link de recuperação</button>' +
+        '<div class="lp-links">' +
+          '<a onclick="window._lpSetMode(\'signin\')">Voltar ao login</a>' +
+        '</div>' +
+      '</form>'
+    );
   }
 
-  // ── Wiring ────────────────────────────────────────────────────────────────────
+  // ── Mode switch ───────────────────────────────────────────────────────────────
 
-  function wire(container) {
-    var googleBtn = document.getElementById('lp-google-btn');
-    if (googleBtn) {
-      googleBtn.addEventListener('click', function () {
-        window.signInWithGoogle();
-      });
-    }
+  window._lpSetMode = function (mode) {
+    _emailMode = mode;
 
-    var emailToggle = document.getElementById('lp-email-toggle');
-    if (emailToggle) {
-      emailToggle.addEventListener('click', function () {
-        _emailSectionVisible = !_emailSectionVisible;
-        var section = document.getElementById('lp-email-section');
-        if (section) {
-          section.style.display = _emailSectionVisible ? 'block' : 'none';
-          if (_emailSectionVisible) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }
-        emailToggle.textContent = _emailSectionVisible ? 'Ocultar email' : 'Entrar com email';
-      });
-    }
-
-    wireEmailForm();
-  }
-
-  function wireEmailForm() {
-    var submitBtn = document.getElementById('email-submit');
-    if (submitBtn) submitBtn.addEventListener('click', handleEmailSubmit);
-
-    var switchSignup = document.getElementById('switch-signup');
-    if (switchSignup) switchSignup.addEventListener('click', function () {
-      emailMode = 'signup'; rerenderEmailForm();
+    // Update tabs
+    ['signin', 'signup', 'reset'].forEach(function (m) {
+      var tab = document.getElementById('lp-tab-' + m);
+      if (tab) tab.classList.toggle('active', m === mode);
     });
 
-    var switchSignin = document.getElementById('switch-signin');
-    if (switchSignin) switchSignin.addEventListener('click', function () {
-      emailMode = 'signin'; rerenderEmailForm();
-    });
-
-    var switchReset = document.getElementById('switch-reset');
-    if (switchReset) switchReset.addEventListener('click', function () {
-      emailMode = 'reset'; rerenderEmailForm();
-    });
-  }
-
-  function rerenderEmailForm() {
+    // Re-render form
     var slot = document.getElementById('lp-email-form');
-    if (slot) {
-      slot.innerHTML = buildEmailForm();
-      wireEmailForm();
-    }
-  }
+    if (slot) slot.innerHTML = _buildEmailForm();
+  };
 
-  function handleEmailSubmit() {
-    if (emailMode === 'signin') {
-      var email = document.getElementById('login-email').value.trim();
-      var pwd = document.getElementById('login-password').value;
+  // ── Submit handler ────────────────────────────────────────────────────────────
+
+  window._lpSubmit = function () {
+    if (_emailMode === 'signin') {
+      var email = (document.getElementById('lp-email') || {}).value.trim();
+      var pwd   = (document.getElementById('lp-password') || {}).value;
       if (!email || !pwd) {
-        window.showNotification('Atenção', 'Preencha email e senha', 'warning');
+        window.showNotification('Atenção', 'Preencha e-mail e senha', 'warning');
         return;
       }
       window.showLoading('Entrando…');
       window.signInWithEmail(email, pwd).finally(window.hideLoading);
-    } else if (emailMode === 'signup') {
-      var name = document.getElementById('signup-name').value.trim();
-      var em   = document.getElementById('signup-email').value.trim();
-      var pw   = document.getElementById('signup-password').value;
+
+    } else if (_emailMode === 'signup') {
+      var name = (document.getElementById('lp-name') || {}).value.trim();
+      var em   = (document.getElementById('lp-email') || {}).value.trim();
+      var pw   = (document.getElementById('lp-password') || {}).value;
       if (!name || !em || !pw) {
         window.showNotification('Atenção', 'Preencha todos os campos', 'warning');
         return;
       }
       if (pw.length < 6) {
-        window.showNotification('Atenção', 'Senha precisa ter pelo menos 6 caracteres', 'warning');
+        window.showNotification('Atenção', 'A senha precisa ter pelo menos 6 caracteres', 'warning');
         return;
       }
       window.showLoading('Criando conta…');
       window.signUpWithEmail(em, pw, name).finally(window.hideLoading);
-    } else if (emailMode === 'reset') {
-      var re = document.getElementById('reset-email').value.trim();
+
+    } else if (_emailMode === 'reset') {
+      var re = (document.getElementById('lp-email') || {}).value.trim();
       if (!re) {
-        window.showNotification('Atenção', 'Informe seu email', 'warning');
+        window.showNotification('Atenção', 'Informe seu e-mail', 'warning');
         return;
       }
       window.sendPasswordReset(re).then(function () {
-        emailMode = 'signin';
-        rerenderEmailForm();
+        window._lpSetMode('signin');
+      });
+    }
+  };
+
+  // ── Wire events ───────────────────────────────────────────────────────────────
+
+  function _wire() {
+    var googleBtn = document.getElementById('lp-google-btn');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', function () {
+        window.signInWithGoogle();
       });
     }
   }
